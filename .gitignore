@@ -1,0 +1,31 @@
+# Dependencies
+/node_modules
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Local environment files
+.env*
+!.env.example
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Project documentation excluded from the public repository
+/docs/*.md
