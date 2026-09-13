@@ -1,4 +1,5 @@
 import { generateCity } from "@/lib/city/generate-city";
+import type { CityModel } from "@/types/city";
 import type { DependencyEdge, RepositoryAnalysis, RepositoryFile } from "@/types/repository";
 
 function file(
@@ -50,17 +51,157 @@ const files = [
 ];
 
 const edges: DependencyEdge[] = [
-  { source: "app/page.tsx", target: "components/CityScene.tsx", specifier: "../components/CityScene", type: "import" },
-  { source: "components/CityScene.tsx", target: "components/Building.tsx", specifier: "./Building", type: "import" },
-  { source: "app/api/analyze/route.ts", target: "lib/github/client.ts", specifier: "../../../lib/github/client", type: "import" },
-  { source: "app/api/analyze/route.ts", target: "lib/analyzer/graph.ts", specifier: "../../../lib/analyzer/graph", type: "import" },
-  { source: "lib/analyzer/graph.ts", target: "lib/city/generator.ts", specifier: "../city/generator", type: "import" },
+  {
+    source: "app/page.tsx",
+    target: "components/CityScene.tsx",
+    specifier: "../components/CityScene",
+    type: "import",
+  },
+  {
+    source: "components/CityScene.tsx",
+    target: "components/Building.tsx",
+    specifier: "./Building",
+    type: "import",
+  },
+  {
+    source: "app/api/analyze/route.ts",
+    target: "lib/github/client.ts",
+    specifier: "../../../lib/github/client",
+    type: "import",
+  },
+  {
+    source: "app/api/analyze/route.ts",
+    target: "lib/analyzer/graph.ts",
+    specifier: "../../../lib/analyzer/graph",
+    type: "import",
+  },
+  {
+    source: "lib/analyzer/graph.ts",
+    target: "lib/city/generator.ts",
+    specifier: "../city/generator",
+    type: "import",
+  },
   { source: "lib/city/generator.ts", target: "lib/city/layout.ts", specifier: "./layout", type: "import" },
   { source: "lib/city/generator.ts", target: "lib/city/roads.ts", specifier: "./roads", type: "import" },
-  { source: "tests/layout.test.ts", target: "lib/city/layout.ts", specifier: "../lib/city/layout", type: "import" },
-  { source: "tests/analyzer.test.ts", target: "lib/analyzer/graph.ts", specifier: "../lib/analyzer/graph", type: "import" },
-  { source: "tests/github.test.ts", target: "lib/github/client.ts", specifier: "../lib/github/client", type: "import" },
+  {
+    source: "tests/layout.test.ts",
+    target: "lib/city/layout.ts",
+    specifier: "../lib/city/layout",
+    type: "import",
+  },
+  {
+    source: "tests/analyzer.test.ts",
+    target: "lib/analyzer/graph.ts",
+    specifier: "../lib/analyzer/graph",
+    type: "import",
+  },
+  {
+    source: "tests/github.test.ts",
+    target: "lib/github/client.ts",
+    specifier: "../lib/github/client",
+    type: "import",
+  },
 ];
+
+// An offline software system: eight neighbourhoods, real graph topology and varied scales.
+const neighbourhoods = [
+  {
+    district: "frontend",
+    prefix: "frontend",
+    names: [
+      "Dashboard",
+      "Navigation",
+      "Editor",
+      "Canvas",
+      "Search",
+      "Inspector",
+      "Toolbar",
+      "Settings",
+      "Timeline",
+      "FileTree",
+      "Shortcuts",
+      "Theme",
+    ],
+  },
+  {
+    district: "services",
+    prefix: "services",
+    names: [
+      "gateway",
+      "router",
+      "repository",
+      "analysis",
+      "export",
+      "events",
+      "scheduler",
+      "worker",
+      "queue",
+      "notifications",
+    ],
+  },
+  {
+    district: "data",
+    prefix: "data/schema",
+    names: [
+      "repository",
+      "graph",
+      "storage",
+      "cache",
+      "migration",
+      "index",
+      "query",
+      "relations",
+      "snapshot",
+      "versions",
+    ],
+  },
+  {
+    district: "security",
+    prefix: "auth",
+    names: ["permissions", "session", "policy", "tokens", "access", "roles"],
+  },
+  {
+    district: "tests",
+    prefix: "tests",
+    names: [
+      "gateway.test",
+      "storage.test",
+      "permissions.test",
+      "export.test",
+      "navigation.test",
+      "graph.test",
+      "worker.test",
+      "integration.test",
+    ],
+  },
+  {
+    district: "docs",
+    prefix: "docs",
+    names: ["architecture", "onboarding", "contributing", "api", "design-system", "deployment"],
+  },
+];
+for (const [groupIndex, group] of neighbourhoods.entries()) {
+  for (const [index, name] of group.names.entries()) {
+    const extension = group.district === "docs" ? "md" : group.district === "frontend" ? "tsx" : "ts";
+    const path = `${group.prefix}/${name}.${extension}`;
+    files.push(
+      file(
+        path,
+        group.district,
+        55 + ((index * 173 + groupIndex * 97) % 1100),
+        group.district === "docs" ? 2 : 3 + ((index * 7 + groupIndex * 3) % 65),
+        extension === "md" ? "Markdown" : "TypeScript",
+      ),
+    );
+    const target = index ? `${group.prefix}/${group.names[0]}.${extension}` : "lib/city/generator.ts";
+    edges.push({ source: path, target, specifier: target, type: "import" });
+    if (index % 3 === 0 && groupIndex > 0) {
+      const upstream = neighbourhoods[groupIndex - 1];
+      const other = `${upstream.prefix}/${upstream.names[0]}.${upstream.district === "frontend" ? "tsx" : "ts"}`;
+      edges.push({ source: path, target: other, specifier: other, type: "import" });
+    }
+  }
+}
 
 for (const edge of edges) {
   files.find((candidate) => candidate.id === edge.source)?.dependencies.push(edge.target);
@@ -94,4 +235,14 @@ const analysis: RepositoryAnalysis = {
   },
 };
 
-export const demoCity = generateCity(analysis);
+let cached: CityModel | null = null;
+
+/**
+ * Built on first use rather than at import time: generating it runs PageRank, the district
+ * packing and a route search per dependency, and that used to happen on the main thread
+ * before the first frame could paint.
+ */
+export function getDemoCity() {
+  cached ??= generateCity(analysis);
+  return cached;
+}
