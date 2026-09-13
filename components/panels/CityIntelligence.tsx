@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { DragHandle, useDraggable } from "@/components/ui/draggable";
 import { useCityStore } from "@/store/city-store";
 import type { CityLayer, CityModel } from "@/types/city";
 
@@ -40,10 +41,12 @@ export function CityIntelligence({ city, tab = "layers" }: { city: CityModel; ta
     commits[Math.min(commits.length - 1, Math.floor((timelineIndex / 100) * commits.length))];
   const riskiest = [...city.buildings].sort((a, b) => b.metrics.risk - a.metrics.risk)[0];
   const mostActive = [...city.buildings].sort((a, b) => b.metrics.recentChanges - a.metrics.recentChanges)[0];
+  const drag = useDraggable();
 
   return (
-    <aside className={`intelligence-panel glass-panel tab-${tab}`}>
-      <div className="panel-kicker">CAPAS DE INTELIGENCIA</div>
+    <aside className={`intelligence-panel glass-panel tab-${tab}`} style={drag.style}>
+      <DragHandle handle={drag.handle} label={tab === "git" ? "Git" : "Capas"} dragging={drag.dragging} />
+      <div className="panel-kicker">{tab === "git" ? "HISTORIA Y ENTREGAS" : "CAPAS DE INTELIGENCIA"}</div>
       <div className="layer-grid">
         {layers.map(({ id, label, icon: Icon }) => (
           <button key={id} className={layer === id ? "active" : ""} onClick={() => setLayer(id)}>
