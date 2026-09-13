@@ -4,17 +4,85 @@ import type { GitHubTreeItem } from "@/lib/github/github-client";
 import type { RepositoryMetadata } from "@/types/repository";
 
 const MAX_FILES = 180;
+/** Stays under the route's 60 s ceiling: 180 downloads at concurrency 10 can exceed it. */
+const TIME_BUDGET_MS = 45_000;
 const MAX_TOTAL_CHARACTERS = 2_400_000;
 const MAX_FILE_BYTES = 140_000;
-const EXCLUDED_SEGMENTS = new Set([".git", ".next", ".nuxt", ".output", ".turbo", ".vercel", "build", "coverage", "dist", "node_modules", "out", "target", "vendor"]);
-const TEXT_EXTENSIONS = new Set([
-  "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "rs", "go", "java", "kt", "kts", "cs", "cpp", "cc", "c", "h", "rb", "php", "swift", "scala",
-  "vue", "svelte", "css", "scss", "sass", "less", "html", "sql", "graphql", "gql", "sh", "bash", "ps1", "bat", "cmd", "dockerfile",
-  "json", "jsonc", "md", "mdx", "txt", "yml", "yaml", "toml", "xml", "ini", "cfg", "conf", "properties", "gradle", "lock",
+const EXCLUDED_SEGMENTS = new Set([
+  ".git",
+  ".next",
+  ".nuxt",
+  ".output",
+  ".turbo",
+  ".vercel",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+  "out",
+  "target",
+  "vendor",
 ]);
-const SPECIAL_TEXT_FILES = /(^|\/)(readme|license|changelog|contributing|dockerfile|makefile|procfile|gemfile|rakefile|package\.json|tsconfig(?:\.[^.]+)?\.json)$/i;
-const SENSITIVE_PATH = /(^|\/)(?:\.env(?:\..*)?|\.npmrc|\.pypirc|id_(?:rsa|dsa|ecdsa|ed25519)|.*\.(?:pem|key|p12|pfx)|(?:secrets?|credentials?)(?:\.[^/]*)?)$/i;
-const GENERATED_FILE = /(?:\.min\.(?:js|css)$|\.map$|\.snap$|package-lock\.json$|pnpm-lock\.yaml$|yarn\.lock$)/i;
+const TEXT_EXTENSIONS = new Set([
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "py",
+  "rs",
+  "go",
+  "java",
+  "kt",
+  "kts",
+  "cs",
+  "cpp",
+  "cc",
+  "c",
+  "h",
+  "rb",
+  "php",
+  "swift",
+  "scala",
+  "vue",
+  "svelte",
+  "css",
+  "scss",
+  "sass",
+  "less",
+  "html",
+  "sql",
+  "graphql",
+  "gql",
+  "sh",
+  "bash",
+  "ps1",
+  "bat",
+  "cmd",
+  "dockerfile",
+  "json",
+  "jsonc",
+  "md",
+  "mdx",
+  "txt",
+  "yml",
+  "yaml",
+  "toml",
+  "xml",
+  "ini",
+  "cfg",
+  "conf",
+  "properties",
+  "gradle",
+  "lock",
+]);
+const SPECIAL_TEXT_FILES =
+  /(^|\/)(readme|license|changelog|contributing|dockerfile|makefile|procfile|gemfile|rakefile|package\.json|tsconfig(?:\.[^.]+)?\.json)$/i;
+const SENSITIVE_PATH =
+  /(^|\/)(?:\.env(?:\..*)?|\.npmrc|\.pypirc|id_(?:rsa|dsa|ecdsa|ed25519)|.*\.(?:pem|key|p12|pfx)|(?:secrets?|credentials?)(?:\.[^/]*)?)$/i;
+const GENERATED_FILE =
+  /(?:\.min\.(?:js|css)$|\.map$|\.snap$|package-lock\.json$|pnpm-lock\.yaml$|yarn\.lock$)/i;
 
 export interface MarkdownExportResult {
   markdown: string;
@@ -40,8 +108,28 @@ function priority(item: GitHubTreeItem) {
   const extension = path.posix.extname(item.path).slice(1).toLowerCase();
   const depth = item.path.split("/").length;
   let score = 0;
-  if (/^(readme|package\.json|pyproject\.toml|cargo\.toml|go\.mod|pom\.xml|build\.gradle)/.test(name)) score += 1_000_000;
-  if (["ts", "tsx", "js", "jsx", "py", "rs", "go", "java", "kt", "cs", "cpp", "c", "rb", "php", "swift"].includes(extension)) score += 500_000;
+  if (/^(readme|package\.json|pyproject\.toml|cargo\.toml|go\.mod|pom\.xml|build\.gradle)/.test(name))
+    score += 1_000_000;
+  if (
+    [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "py",
+      "rs",
+      "go",
+      "java",
+      "kt",
+      "cs",
+      "cpp",
+      "c",
+      "rb",
+      "php",
+      "swift",
+    ].includes(extension)
+  )
+    score += 500_000;
   if (["md", "mdx", "json", "yml", "yaml", "toml"].includes(extension)) score += 200_000;
   return score + Math.min(item.size ?? 0, 150_000) - depth * 500;
 }
@@ -83,15 +171,37 @@ function codeFence(content: string) {
 
 function languageFor(filePath: string) {
   const extension = path.posix.extname(filePath).slice(1).toLowerCase();
-  const aliases: Record<string, string> = { ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx", py: "python", rb: "ruby", rs: "rust", cs: "csharp", sh: "bash", yml: "yaml", md: "markdown" };
+  const aliases: Record<string, string> = {
+    ts: "typescript",
+    tsx: "tsx",
+    js: "javascript",
+    jsx: "jsx",
+    py: "python",
+    rb: "ruby",
+    rs: "rust",
+    cs: "csharp",
+    sh: "bash",
+    yml: "yaml",
+    md: "markdown",
+  };
   return aliases[extension] ?? extension;
 }
 
-async function concurrentMap<T, R>(values: T[], concurrency: number, task: (value: T) => Promise<R>) {
-  const results = new Array<R>(values.length);
+/**
+ * Stops queueing work once the deadline passes and returns what it has. A partial document
+ * that says it is partial beats a 504 with nothing in it.
+ */
+async function concurrentMap<T, R>(
+  values: T[],
+  concurrency: number,
+  deadline: number,
+  task: (value: T) => Promise<R>,
+) {
+  const results = new Array<R | undefined>(values.length);
   let cursor = 0;
   async function worker() {
     while (cursor < values.length) {
+      if (Date.now() > deadline) return;
       const index = cursor++;
       results[index] = await task(values[index]);
     }
@@ -105,19 +215,29 @@ export async function exportRepositoryMarkdown(
   tree: { tree: GitHubTreeItem[]; truncated: boolean },
   loadRawFile: RawLoader,
 ): Promise<MarkdownExportResult> {
-  const eligible = tree.tree.filter(isTextFile).sort((a, b) => priority(b) - priority(a) || a.path.localeCompare(b.path));
+  const eligible = tree.tree
+    .filter(isTextFile)
+    .sort((a, b) => priority(b) - priority(a) || a.path.localeCompare(b.path));
   const selected = eligible.slice(0, MAX_FILES);
-  const loaded = await concurrentMap(selected, 10, async (item) => ({ item, content: await loadRawFile(metadata, item.path) }));
+  const deadline = Date.now() + TIME_BUDGET_MS;
+  const loaded = await concurrentMap(selected, 16, deadline, async (item) => ({
+    item,
+    content: await loadRawFile(metadata, item.path),
+  }));
   const sections: string[] = [];
   let characters = 0;
   let filesIncluded = 0;
 
-  for (const { item, content } of loaded) {
+  for (const entry of loaded) {
+    if (!entry) continue;
+    const { item, content } = entry;
     if (!content || content.includes("\u0000")) continue;
     const nextSize = content.length + item.path.length + 80;
     if (characters + nextSize > MAX_TOTAL_CHARACTERS) break;
     const fence = codeFence(content);
-    sections.push(`## \`${item.path}\`\n\n${fence}${languageFor(item.path)}\n${content.replace(/\s+$/, "")}\n${fence}`);
+    sections.push(
+      `## \`${item.path}\`\n\n${fence}${languageFor(item.path)}\n${content.replace(/\s+$/, "")}\n${fence}`,
+    );
     characters += nextSize;
     filesIncluded += 1;
   }
