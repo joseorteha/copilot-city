@@ -55,7 +55,7 @@ export function Ground({ city }: { city: CityModel }) {
   );
 
   return (
-    <mesh geometry={geometry} receiveShadow>
+    <mesh name="terrain" geometry={geometry} receiveShadow>
       <meshStandardMaterial
         vertexColors
         map={detail}

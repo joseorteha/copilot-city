@@ -21,13 +21,7 @@ export function Plaza({ district, isCore }: { district: CityDistrict; isCore: bo
       </mesh>
       <mesh position={[0, 0.1, 0]}>
         <cylinderGeometry args={[0.72, 0.78, 0.14, 48]} />
-        <meshPhysicalMaterial
-          color="#376d76"
-          roughness={0.12}
-          metalness={0.08}
-          transmission={0.12}
-          clearcoat={0.8}
-        />
+        <meshStandardMaterial color="#376d76" roughness={0.12} metalness={0.34} />
       </mesh>
       <mesh castShadow position={[0, 0.54, 0]} rotation={[0, Math.PI / 4, 0]}>
         <torusKnotGeometry args={[0.23, 0.055, 24, 4, 2, 3]} />
@@ -111,13 +105,7 @@ export function PlazaNetwork({
       </instancedMesh>
       <instancedMesh ref={water} args={[undefined, undefined, districts.length]}>
         <cylinderGeometry args={[1, 1, 1, 48]} />
-        <meshPhysicalMaterial
-          color="#376d76"
-          roughness={0.12}
-          metalness={0.08}
-          transmission={0.12}
-          clearcoat={0.8}
-        />
+        <meshStandardMaterial color="#376d76" roughness={0.12} metalness={0.34} />
       </instancedMesh>
       <instancedMesh ref={sculptures} args={[undefined, undefined, districts.length]} castShadow>
         <torusKnotGeometry args={[0.23, 0.055, 52, 8, 2, 3]} />

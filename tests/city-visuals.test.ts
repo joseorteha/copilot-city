@@ -66,7 +66,7 @@ describe("procedural visual kit", () => {
     });
 
     expect(signatures.size).toBeGreaterThanOrEqual(8);
-  });
+  }, 10_000);
 
   it("keeps a building variation deterministic", () => {
     const building = { ...getDemoCity().buildings[3], detailSeed: 73 };

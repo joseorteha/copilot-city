@@ -175,6 +175,23 @@ describe("generateCity", () => {
       city.buildings.map((building) => building.position),
     );
   });
+
+  it("turns nested folders into deterministic neighborhoods", () => {
+    const nested = [
+      file("app/auth/login.ts", "app"),
+      file("app/auth/session.ts", "app"),
+      file("app/billing/invoice.ts", "app"),
+    ];
+    const nestedCity = generateCity(analysisOf(nested, []));
+    expect(
+      nestedCity.buildings
+        .filter((building) => building.path.includes("/auth/"))
+        .map((building) => building.neighborhoodId),
+    ).toEqual(["app/auth", "app/auth"]);
+    expect(
+      nestedCity.buildings.find((building) => building.path.includes("/billing/"))?.neighborhoodName,
+    ).toBe("Billing");
+  });
 });
 
 describe("graphCentrality", () => {

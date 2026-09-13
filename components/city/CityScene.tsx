@@ -11,7 +11,7 @@ import {
   Vignette,
 } from "@react-three/postprocessing";
 import { type RefObject, Suspense, useEffect, useRef } from "react";
-import { AgXToneMapping, Mesh, PCFShadowMap, SRGBColorSpace, Vector3 } from "three";
+import { AgXToneMapping, InstancedMesh, Mesh, PCFShadowMap, SRGBColorSpace, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 import { CityLighting, HORIZON_COLOR } from "@/components/city/CityLighting";
@@ -47,6 +47,7 @@ function RendererProbe() {
     gl.domElement.dataset.programs = String(gl.info.programs?.length ?? 0);
     let visibleMeshes = 0;
     let materialPasses = 0;
+    const triangleBreakdown = new Map<string, number>();
     scene.traverse((object) => {
       if (!(object instanceof Mesh)) return;
       let current = object.parent;
@@ -58,9 +59,18 @@ function RendererProbe() {
       if (!visible) return;
       visibleMeshes += 1;
       materialPasses += Array.isArray(object.material) ? Math.max(1, object.geometry.groups.length) : 1;
+      const baseTriangles = object.geometry.index
+        ? object.geometry.index.count / 3
+        : (object.geometry.attributes.position?.count ?? 0) / 3;
+      const triangles = baseTriangles * (object instanceof InstancedMesh ? object.count : 1);
+      const category = object.name.split(":")[0] || object.geometry.type;
+      triangleBreakdown.set(category, (triangleBreakdown.get(category) ?? 0) + triangles);
     });
     gl.domElement.dataset.visibleMeshes = String(visibleMeshes);
     gl.domElement.dataset.materialPasses = String(materialPasses);
+    gl.domElement.dataset.triangleBreakdown = JSON.stringify(
+      [...triangleBreakdown].sort((a, b) => b[1] - a[1]).slice(0, 30),
+    );
   });
   return null;
 }
@@ -253,19 +263,20 @@ export function CityScene({ city, preview = false }: { city: CityModel; preview?
   const quality = useCityStore((state) => state.quality);
   const controls = useRef<OrbitControlsImpl>(null);
   const maxDistance = Math.max(48, city.bounds.radius * 2.4);
-  // "auto" was effectively the low profile: no shadows, DPR 0.7, no antialiasing — so the
-  // detail the city carries never showed by default. Auto now renders at full fidelity and
-  // "low" stays the escape hatch for weak machines.
-  const highQuality = quality !== "low";
+  // Auto is the stable presentation profile: native DPR, antialiasing and a measured LOD.
+  // High adds N8AO, a higher DPR and refreshed shadows for deliberate captures; those costs
+  // must never be enabled silently.
+  const highQuality = quality === "high";
+  const balancedQuality = quality !== "low";
   const night = visualMode === "night";
 
   return (
     <Canvas
       key={city.repository.fullName}
       shadows={highQuality}
-      dpr={quality === "low" ? 0.7 : [1, 1.4]}
+      dpr={quality === "low" ? 0.7 : highQuality ? [1, 1.4] : 1}
       camera={{ position: [24, 18, 26], fov: 42, near: 0.1, far: 240 }}
-      gl={{ antialias: highQuality, powerPreference: "high-performance" }}
+      gl={{ antialias: balancedQuality, powerPreference: "high-performance" }}
       onCreated={({ gl }) => {
         gl.shadowMap.type = PCFShadowMap;
         gl.domElement.id = "city-viewport";

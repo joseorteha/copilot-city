@@ -892,7 +892,8 @@ kbd {
 .scene-tools button:last-child {
   border-bottom: 0;
 }
-.scene-tools button:hover {
+.scene-tools button:hover,
+.scene-tools button.active {
   color: var(--gold);
   background: rgba(255, 255, 255, 0.05);
 }
@@ -910,6 +911,96 @@ kbd {
 .mode-night .glass-panel,
 .mode-night .scene-tools {
   background: rgba(8, 18, 19, 0.84);
+}
+
+/* ---------- minimap ---------- */
+.city-minimap {
+  position: absolute;
+  z-index: 5;
+  right: 16px;
+  bottom: 18px;
+  width: 188px;
+  overflow: hidden;
+  padding: 9px;
+  transition: right 180ms ease;
+}
+.has-inspector .city-minimap {
+  right: 390px;
+}
+.minimap-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1px 2px 7px;
+  color: #aeb9b3;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.minimap-heading span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.minimap-heading svg {
+  color: var(--gold);
+}
+.minimap-heading button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: #98a59e;
+  background: transparent;
+  cursor: pointer;
+}
+.minimap-heading button:hover {
+  color: #f1e5c4;
+  background: rgba(255, 255, 255, 0.06);
+}
+.city-minimap > svg {
+  display: block;
+  width: 100%;
+  height: 112px;
+  border: 1px solid rgba(235, 241, 236, 0.09);
+  border-radius: 8px;
+  background: rgba(9, 18, 18, 0.36);
+}
+.minimap-districts rect {
+  cursor: pointer;
+  opacity: 0.33;
+  stroke: rgba(246, 239, 215, 0.5);
+  stroke-width: 0.13;
+  transition: opacity 120ms ease;
+}
+.minimap-districts rect:hover {
+  opacity: 0.64;
+}
+.minimap-roads line {
+  stroke: rgba(236, 225, 190, 0.62);
+  stroke-linecap: round;
+}
+.minimap-buildings circle {
+  fill: rgba(220, 228, 221, 0.62);
+  pointer-events: none;
+}
+.minimap-buildings .is-core {
+  fill: var(--gold);
+  stroke: rgba(255, 247, 215, 0.75);
+  stroke-width: 0.18;
+}
+.minimap-buildings .is-selected {
+  fill: #fff5cf;
+  stroke: var(--gold);
+  stroke-width: 0.3;
+}
+.minimap-caption {
+  padding: 7px 2px 1px;
+  color: #8f9c95;
+  font-size: 9px;
+  text-align: center;
 }
 
 .explore-hint {
@@ -1342,6 +1433,25 @@ kbd {
   font-size: var(--fs-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.inspector-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #89968f;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+}
+.inspector-location b {
+  color: #b7c2bc;
+  font-weight: 600;
+}
+.inspector-location span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--gold);
 }
 .importance {
   display: grid;
@@ -1822,6 +1932,15 @@ kbd {
     bottom: 70px;
     width: calc(100vw - 20px);
     left: 10px;
+  }
+  .city-minimap,
+  .has-inspector .city-minimap {
+    right: 10px;
+    bottom: 68px;
+    width: 154px;
+  }
+  .city-minimap > svg {
+    height: 88px;
   }
 }
 
