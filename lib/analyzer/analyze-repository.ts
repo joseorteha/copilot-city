@@ -28,7 +28,8 @@ const EXCLUDED_SEGMENTS = new Set([
   "vendor",
 ]);
 
-const SKIPPED_FILES = /(?:\.min\.(?:js|css)$|\.map$|\.snap$|lock$|package-lock\.json$|pnpm-lock\.yaml$|yarn\.lock$)/i;
+const SKIPPED_FILES =
+  /(?:\.min\.(?:js|css)$|\.map$|\.snap$|lock$|package-lock\.json$|pnpm-lock\.yaml$|yarn\.lock$)/i;
 const WRAPPER_DIRECTORIES = new Set(["src", "app", "apps", "lib", "packages"]);
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
@@ -68,8 +69,29 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
 };
 
 const SOURCE_EXTENSIONS = new Set([
-  "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "rs", "go", "java", "kt", "kts",
-  "cs", "cpp", "cc", "c", "h", "rb", "php", "swift", "scala", "vue", "svelte",
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "py",
+  "rs",
+  "go",
+  "java",
+  "kt",
+  "kts",
+  "cs",
+  "cpp",
+  "cc",
+  "c",
+  "h",
+  "rb",
+  "php",
+  "swift",
+  "scala",
+  "vue",
+  "svelte",
 ]);
 
 const IMPORT_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json"];
@@ -163,31 +185,44 @@ function importSpecifiers(content: string) {
   return imports;
 }
 
-function resolveImport(sourcePath: string, specifier: string, knownPaths: Set<string>) {
-  const cleanSpecifier = specifier.split(/[?#]/)[0];
-  let base: string;
-
-  if (cleanSpecifier.startsWith("@/") || cleanSpecifier.startsWith("~/")) {
-    base = cleanSpecifier.slice(2);
-  } else if (cleanSpecifier.startsWith(".")) {
-    base = path.posix.normalize(path.posix.join(path.posix.dirname(sourcePath), cleanSpecifier));
-  } else {
-    return null;
-  }
-  const candidates = [
+function withExtensions(base: string) {
+  return [
     base,
     ...IMPORT_EXTENSIONS.map((extension) => `${base}${extension}`),
     ...IMPORT_EXTENSIONS.map((extension) => `${base}/index${extension}`),
   ];
-
-  return candidates.find((candidate) => knownPaths.has(candidate)) ?? null;
 }
 
-async function mapWithConcurrency<T, R>(
-  values: T[],
-  concurrency: number,
-  mapper: (value: T) => Promise<R>,
-) {
+function resolveImport(sourcePath: string, specifier: string, knownPaths: Set<string>) {
+  const cleanSpecifier = specifier.split(/[?#]/)[0];
+
+  if (cleanSpecifier.startsWith(".")) {
+    const base = path.posix.normalize(path.posix.join(path.posix.dirname(sourcePath), cleanSpecifier));
+    return withExtensions(base).find((candidate) => knownPaths.has(candidate)) ?? null;
+  }
+
+  if (!cleanSpecifier.startsWith("@/") && !cleanSpecifier.startsWith("~/")) return null;
+
+  // `@/x` is a tsconfig path alias whose root is the project root in some repositories and
+  // `src/` in others. Resolving it only against the repository root meant that in any
+  // `src/`-based project no alias import ever matched a file, and the whole city lost its
+  // internal dependencies. The importing file's own wrapper directory is tried first.
+  const bare = cleanSpecifier.slice(2);
+  const ownRoot = sourcePath.split("/")[0];
+  const roots = [
+    ...(WRAPPER_DIRECTORIES.has(ownRoot) ? [`${ownRoot}/`] : []),
+    "",
+    ...[...WRAPPER_DIRECTORIES].map((directory) => `${directory}/`),
+  ];
+
+  for (const root of roots) {
+    const match = withExtensions(`${root}${bare}`).find((candidate) => knownPaths.has(candidate));
+    if (match) return match;
+  }
+  return null;
+}
+
+async function mapWithConcurrency<T, R>(values: T[], concurrency: number, mapper: (value: T) => Promise<R>) {
   const results: R[] = new Array(values.length);
   let nextIndex = 0;
 
@@ -317,11 +352,7 @@ export async function analyzeRepositoryTree(
       dependenciesFound: edges.length,
       truncated: tree.truncated || candidates.length > files.length,
       dependencyMode:
-        analyzedCount === 0
-          ? "structure-only"
-          : analyzedCount >= sourceFileCount
-            ? "full"
-            : "partial",
+        analyzedCount === 0 ? "structure-only" : analyzedCount >= sourceFileCount ? "full" : "partial",
     },
   };
 }
