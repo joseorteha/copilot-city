@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "path": "environment/rural_asphalt_road_1k.hdr",
+      "title": "Rural Asphalt Road HDRI",
+      "creator": "Alexander Scholten / Poly Haven",
+      "source": "https://polyhaven.com/a/rural_asphalt_road",
+      "license": "CC0-1.0",
+      "bytes": 1482793
+    },
+    {
+      "path": "vehicles/sedan.glb",
+      "title": "Sedan",
+      "creator": "Kenney",
+      "source": "https://kenney.nl/assets/car-kit",
+      "license": "CC0-1.0",
+      "bytes": 39252
+    },
+    {
+      "path": "vehicles/suv.glb",
+      "title": "SUV",
+      "creator": "Kenney",
+      "source": "https://kenney.nl/assets/car-kit",
+      "license": "CC0-1.0",
+      "bytes": 44224
+    },
+    {
+      "path": "vehicles/taxi.glb",
+      "title": "Taxi",
+      "creator": "Kenney",
+      "source": "https://kenney.nl/assets/car-kit",
+      "license": "CC0-1.0",
+      "bytes": 40468
+    },
+    {
+      "path": "vehicles/van.glb",
+      "title": "Van",
+      "creator": "Kenney",
+      "source": "https://kenney.nl/assets/car-kit",
+      "license": "CC0-1.0",
+      "bytes": 39632
+    },
+    {
+      "path": "vehicles/Textures/colormap.png",
+      "title": "Car Kit colormap",
+      "creator": "Kenney",
+      "source": "https://kenney.nl/assets/car-kit",
+      "license": "CC0-1.0",
+      "bytes": 12371
+    }
+  ]
+}
