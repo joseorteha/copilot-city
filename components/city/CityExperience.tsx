@@ -74,26 +74,6 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function FeatureCard({
-  icon: Icon,
-  title,
-  children,
-}: {
-  icon: typeof Building2;
-  title: string;
-  children: string;
-}) {
-  return (
-    <div className="landing-feature">
-      <span className="landing-feature-icon">
-        <Icon size={17} />
-      </span>
-      <h3>{title}</h3>
-      <p>{children}</p>
-    </div>
-  );
-}
-
 function useOptionalCityAmbience(active: boolean) {
   const [enabled, setEnabled] = useState(false);
   const audio = useRef<{ context: AudioContext; sources: AudioScheduledSourceNode[] } | null>(null);
@@ -370,8 +350,13 @@ export function CityExperience() {
           <span className="live-dot" />
           {status === "ready" ? activeCity.repository.fullName : "URBANISMO GENERADO POR CÓDIGO"}
         </div>
-        <a className="github-link" href="https://github.com" target="_blank" rel="noreferrer">
-          <Github size={16} /> <span>GitHub</span>
+        <a
+          className="github-link"
+          href="https://github.com/joseorteha/copilot-city"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Github size={16} /> <span>Repositorio</span>
         </a>
       </header>
 
@@ -380,7 +365,7 @@ export function CityExperience() {
           <div className="landing-scroll">
             <div className="landing-hero">
               <div className="eyebrow">
-                <Sparkles size={13} /> URBANISMO GENERADO POR CÓDIGO
+                <Sparkles size={13} /> GITHUB → CIUDAD 3D · HECHO CON GITHUB COPILOT
               </div>
               {baselineCity && (
                 <div className="comparison-base">
@@ -391,12 +376,14 @@ export function CityExperience() {
                 </div>
               )}
               <h1>
-                Convierte cualquier repositorio en <span>una ciudad recorrible</span>
+                No leas tu código.
+                <br />
+                <span>Recórrelo.</span>
               </h1>
               <p className="landing-lead">
-                Copilot City lee la arquitectura real de tu proyecto y la construye en 3D: cada archivo es un
-                edificio, cada carpeta es un distrito y cada import traza una calle. Escribe una URL de GitHub
-                y camina por tu propio código en segundos.
+                Copilot City convierte cualquier repositorio de GitHub en una ciudad 3D que puedes explorar.
+                Los archivos son edificios, las carpetas distritos y las dependencias trazan las calles.
+                Escribe una URL y camina por tu arquitectura en segundos.
               </p>
 
               <form className="repository-form" onSubmit={submit}>
@@ -435,28 +422,44 @@ export function CityExperience() {
               </div>
             </div>
 
-            <div className="landing-features">
-              <FeatureCard icon={Building2} title="Arquitectura visible">
-                El tamaño, la altura y la posición de cada edificio reflejan complejidad, importancia y
-                centralidad reales del código, no datos decorativos.
-              </FeatureCard>
-              <FeatureCard icon={GitCompareArrows} title="Historia y Pull Requests">
-                Recorre la línea de tiempo de commits, revisa Pull Requests abiertas y observa cómo cambia el
-                skyline con cada entrega.
-              </FeatureCard>
-              <FeatureCard icon={Layers3} title="Capas de inteligencia">
-                Cambia entre estructura, complejidad, riesgo, autoría y tests para leer el mismo repositorio
-                desde ángulos distintos.
-              </FeatureCard>
-              <FeatureCard icon={Download} title="Contexto listo para IA">
-                Exporta un Markdown con la estructura y el código relevante del repositorio, listo para
-                pegarlo en tu asistente favorito.
-              </FeatureCard>
+            <div className="landing-map">
+              <span className="landing-map-title">Cómo se traduce tu repo</span>
+              <ul>
+                <li>
+                  <span>archivo</span>
+                  <i>→</i>
+                  <b>edificio</b>
+                </li>
+                <li>
+                  <span>carpeta</span>
+                  <i>→</i>
+                  <b>distrito</b>
+                </li>
+                <li>
+                  <span>import</span>
+                  <i>→</i>
+                  <b>calle</b>
+                </li>
+                <li>
+                  <span>más dependido</span>
+                  <i>→</i>
+                  <b>el corazón de la ciudad</b>
+                </li>
+              </ul>
             </div>
 
-            <div className="landing-footer-note">
-              Funciona con cualquier repositorio público · No requiere instalación · Datos leídos directamente
-              de la API de GitHub
+            <div className="landing-caps">
+              <span>Capas de análisis</span>
+              <span>Historia de Git</span>
+              <span>Pull Requests en vivo</span>
+              <span>Export .md para tu IA</span>
+            </div>
+
+            <div className="landing-credit">
+              <span>Un proyecto de</span>
+              <a href="https://x.com/mr_orteega" target="_blank" rel="noreferrer">
+                <b>José Ortega</b> · @mr_orteega
+              </a>
             </div>
           </div>
         </section>
@@ -868,6 +871,15 @@ export function CityExperience() {
         </>
       )}
 
+      <a
+        className="brand-watermark"
+        href="https://x.com/mr_orteega"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Creado por José Ortega (@mr_orteega)"
+      >
+        <span>por</span> José Ortega <b>· @mr_orteega</b>
+      </a>
       {status === "idle" && (
         <div className="preview-caption">
           <span /> Vista previa · ciudad de demostración
