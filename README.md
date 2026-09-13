@@ -27,7 +27,8 @@ El MVP incluye:
 - Vista previa de código dentro del inspector y comparación entre dos repositorios.
 - Exportador de contexto Markdown para IA con resumen, árbol, código, conteo aproximado de tokens y descarga directa.
 - Exclusión automática de binarios, builds, dependencias, `.env`, credenciales y llaves privadas.
-- Estados completos de carga, error y resultados.
+- Estados completos de carga, error y resultados, con aviso explícito cuando GitHub limita las solicitudes y el historial no se pudo leer.
+- Atajos de teclado: `/` busca, `D` alterna día y noche, `M` alterna mapa y exploración, `N` enfoca el núcleo y `1`–`8` cambian de capa.
 
 ## Sistema visual 2026
 
@@ -45,7 +46,7 @@ El MVP incluye:
 
 Los controles visuales aparecen en la esquina superior derecha después de analizar un repositorio: día/noche, recorrido, fotografía y calidad.
 
-La dirección completa está documentada en [`docs/COPILOT_CITY_DIRECCION_VISUAL_3D_2026.md`](docs/COPILOT_CITY_DIRECCION_VISUAL_3D_2026.md).
+La dirección visual completa se mantiene en `docs/`, fuera del repositorio público.
 
 ## Ejecutar
 
@@ -81,6 +82,26 @@ La escena de bienvenida usa `lib/city/demo-city.ts`; al terminar un análisis se
 ```bash
 npm run typecheck
 npm run lint
+npm run format:check
+npm test
 npm run build
 npm run visual-check -- http://localhost:3000
 ```
+
+`npm test` cubre las funciones puras: resolución de URLs de GitHub, resolución de imports
+(relativos, `require`, dinámicos y alias `@/` tanto en la raíz como bajo `src/`), exclusión de
+dependencias y binarios, centralidad del grafo, detección de ciclos, no solapamiento de
+distritos y determinismo del generador.
+
+`visual-check` resuelve el navegador por `BROWSER_PATH` o por las rutas habituales de Edge y
+Chrome, y escribe las capturas en `.artifacts/` (fuera del control de versiones).
+
+El mismo conjunto corre en CI en cada push y pull request.
+
+## Rendimiento
+
+Cada edificio se fusiona en una sola malla con un grupo de material por tipo de superficie,
+de modo que un edificio cuesta cuatro o cinco llamadas de dibujo en lugar de treinta. Las
+fachadas son textura procedural compartida en vez de geometría instanciada, los materiales se
+cachean por tono y color analítico, y el motor 3D se carga de forma diferida: el `First Load
+JS` de `/` es de 135 kB frente a los 508 kB anteriores.
