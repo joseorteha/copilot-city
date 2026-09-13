@@ -74,6 +74,18 @@ export function Building({ building, order }: { building: CityBuilding; order: n
     group.current.scale.y += (targetScale - group.current.scale.y) * Math.min(1, delta * 8);
   });
 
+  // The map used to drop to a simplified box at 5 units, so the retail, balconies and
+  // rooftop detail were essentially never seen from an orbiting camera — the "I see no
+  // change" problem. Detail now reaches across the framed city; "low" tightens it back for
+  // weak machines, which is what that mode is for.
+  const detailReach = quality === "low" ? 16 : 95;
+  const midReach = quality === "low" ? 46 : 230;
+  const mapLod: [number, number, number] = selected
+    ? [0, Math.max(28, detailReach), Math.max(80, midReach)]
+    : viewMode === "explore"
+      ? [0, quality === "low" ? 12 : 55, quality === "low" ? 40 : 150]
+      : [0, detailReach, midReach];
+
   const stop = (event: ThreeEvent<MouseEvent | PointerEvent>) => event.stopPropagation();
 
   return (
@@ -98,10 +110,7 @@ export function Building({ building, order }: { building: CityBuilding; order: n
         document.body.style.cursor = "";
       }}
     >
-      <Detailed
-        distances={selected ? [0, 18, 48] : viewMode === "explore" ? [0, 8, 34] : [0, 5, 34]}
-        hysteresis={0.24}
-      >
+      <Detailed distances={mapLod} hysteresis={0.24}>
         {levels.near ? (
           <mesh
             geometry={levels.near.geometry}
