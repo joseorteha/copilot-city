@@ -1,4 +1,4 @@
-import type { AnalysisDiagnostics, CommitInsight, ContributorInsight, PullRequestInsight, RepositoryMetadata } from "@/types/repository";
+import type { AnalysisDiagnostics, RepositoryInsights, RepositoryMetadata } from "@/types/repository";
 
 export type BuildingVariant =
   | "office"
@@ -8,14 +8,19 @@ export type BuildingVariant =
   | "landmark"
   | "industrial"
   | "laboratory"
-  | "library";
+  | "library"
+  | "data-center"
+  | "service-hub"
+  | "security";
 
 export type BuildingTone = "stone" | "brick" | "concrete" | "sand" | "slate";
-export type DistrictPurpose = "frontend" | "services" | "data" | "tests" | "docs" | "infrastructure" | "general";
+export type DistrictPurpose =
+  "frontend" | "services" | "data" | "tests" | "docs" | "infrastructure" | "general";
 export type CityViewMode = "map" | "explore";
 export type CityVisualMode = "day" | "night";
 export type CityQuality = "auto" | "high" | "low";
-export type CityLayer = "structure" | "complexity" | "activity" | "dependencies" | "risk" | "ownership";
+export type CityLayer =
+  "structure" | "complexity" | "activity" | "dependencies" | "risk" | "ownership" | "core" | "tests";
 export type Position3D = [number, number, number];
 export type Position2D = [number, number];
 
@@ -50,6 +55,8 @@ export interface CityBuilding {
   variant: BuildingVariant;
   tone: BuildingTone;
   importance: number;
+  centrality: number;
+  detailSeed: number;
   isLandmark: boolean;
   codePreview: string | null;
   metrics: BuildingMetrics;
@@ -75,6 +82,7 @@ export interface CityConnection {
   specifier: string;
   type: "import" | "require" | "dynamic-import";
   crossDistrict: boolean;
+  route: Position2D[];
 }
 
 export interface CityRoad {
@@ -109,12 +117,7 @@ export interface CityModel {
   connections: CityConnection[];
   coreBuildingId: string;
   cycles: string[][];
-  insights: {
-    commits: CommitInsight[];
-    pullRequests: PullRequestInsight[];
-    contributors: ContributorInsight[];
-    ci: { status: string; conclusion: string | null; name: string; htmlUrl: string; updatedAt: string } | null;
-  };
+  insights: RepositoryInsights;
   bounds: CityBounds;
   stats: CityStats;
 }

@@ -73,10 +73,14 @@ export interface ContributorInsight {
   contributions: number;
 }
 
+/** Why the git panel is empty, when it is. Silent failure used to look like "no history". */
+export type InsightsDegradation = "rate-limit" | "error" | null;
+
 export interface RepositoryInsights {
   commits: CommitInsight[];
   pullRequests: PullRequestInsight[];
   contributors: ContributorInsight[];
+  degraded: InsightsDegradation;
   ci: {
     status: string;
     conclusion: string | null;
