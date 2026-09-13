@@ -107,7 +107,8 @@ let activeRequest: AbortController | null = null;
 const initialCity = getDemoCity();
 
 export const useCityStore = create<CityState>((set) => ({
-  status: "ready",
+  // Open on the landing over a live preview of the demo city, not straight into it.
+  status: "idle",
   city: initialCity,
   isDemo: true,
   baselineCity: null,
