@@ -222,25 +222,25 @@ function CityPostProcessing({ highQuality, night }: { highQuality: boolean; nigh
       {highQuality && (
         <N8AO
           halfRes
-          aoRadius={highQuality ? 2.1 : 1.3}
-          distanceFalloff={0.75}
-          intensity={highQuality ? 1.5 : 0.9}
-          quality={highQuality ? "medium" : "performance"}
-          color={night ? "#050d12" : "#141d1c"}
+          aoRadius={3.2}
+          distanceFalloff={0.6}
+          intensity={night ? 2.4 : 3}
+          quality="medium"
+          color={night ? "#050d12" : "#0d1512"}
         />
       )}
       <Bloom
         mipmapBlur
         // Night lets far more of the frame through the threshold, which is the point: the
         // glow has to come off the windows, not off the whole facade.
-        luminanceThreshold={night ? 0.42 : 0.92}
+        luminanceThreshold={night ? 0.42 : 0.8}
         luminanceSmoothing={0.28}
-        intensity={night ? 1.05 : 0.12}
+        intensity={night ? 1.05 : 0.22}
         radius={night ? 0.82 : 0.6}
         levels={highQuality ? 5 : 3}
       />
-      <HueSaturation saturation={night ? 0.12 : 0.06} />
-      <BrightnessContrast brightness={night ? 0.015 : 0} contrast={night ? 0.09 : 0.05} />
+      <HueSaturation saturation={night ? 0.1 : 0.04} />
+      <BrightnessContrast brightness={night ? 0.015 : 0} contrast={night ? 0.09 : 0.16} />
       <Vignette eskil={false} offset={0.22} darkness={night ? 0.42 : 0.26} />
     </EffectComposer>
   );
@@ -253,14 +253,17 @@ export function CityScene({ city, preview = false }: { city: CityModel; preview?
   const quality = useCityStore((state) => state.quality);
   const controls = useRef<OrbitControlsImpl>(null);
   const maxDistance = Math.max(48, city.bounds.radius * 2.4);
-  const highQuality = quality === "high";
+  // "auto" was effectively the low profile: no shadows, DPR 0.7, no antialiasing — so the
+  // detail the city carries never showed by default. Auto now renders at full fidelity and
+  // "low" stays the escape hatch for weak machines.
+  const highQuality = quality !== "low";
   const night = visualMode === "night";
 
   return (
     <Canvas
       key={city.repository.fullName}
       shadows={highQuality}
-      dpr={quality === "high" ? [1, 1.3] : quality === "low" ? 0.6 : 0.7}
+      dpr={quality === "low" ? 0.7 : [1, 1.4]}
       camera={{ position: [24, 18, 26], fov: 42, near: 0.1, far: 240 }}
       gl={{ antialias: highQuality, powerPreference: "high-performance" }}
       onCreated={({ gl }) => {
