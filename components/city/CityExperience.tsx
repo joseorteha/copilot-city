@@ -69,6 +69,26 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function FeatureCard({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: typeof Building2;
+  title: string;
+  children: string;
+}) {
+  return (
+    <div className="landing-feature">
+      <span className="landing-feature-icon">
+        <Icon size={17} />
+      </span>
+      <h3>{title}</h3>
+      <p>{children}</p>
+    </div>
+  );
+}
+
 export function CityExperience() {
   const status = useCityStore((state) => state.status);
   const city = useCityStore((state) => state.city);
@@ -280,53 +300,89 @@ export function CityExperience() {
       </header>
 
       {status === "idle" && (
-        <section className="welcome-panel">
-          <div className="eyebrow">
-            <Sparkles size={13} /> EXPLORA TU ARQUITECTURA
+        <section className="landing">
+          <div className="landing-scroll">
+            <div className="landing-hero">
+              <div className="eyebrow">
+                <Sparkles size={13} /> URBANISMO GENERADO POR CÓDIGO
+              </div>
+              {baselineCity && (
+                <div className="comparison-base">
+                  <GitCompareArrows size={13} /> Comparando contra <b>{baselineCity.repository.fullName}</b>
+                  <button onClick={clearComparison}>
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              <h1>
+                Convierte cualquier repositorio en <span>una ciudad recorrible</span>
+              </h1>
+              <p className="landing-lead">
+                Copilot City lee la arquitectura real de tu proyecto y la construye en 3D: cada archivo es un
+                edificio, cada carpeta es un distrito y cada import traza una calle. Escribe una URL de GitHub
+                y camina por tu propio código en segundos.
+              </p>
+
+              <form className="repository-form" onSubmit={submit}>
+                <label htmlFor="repository-url">Repositorio público de GitHub</label>
+                <div className="input-shell">
+                  <Github size={18} />
+                  <input
+                    id="repository-url"
+                    value={url}
+                    onChange={(event) => setUrl(event.target.value)}
+                    placeholder="github.com/usuario/repositorio"
+                    autoComplete="url"
+                    spellCheck={false}
+                  />
+                  <button type="submit" aria-label="Construir ciudad" disabled={!url.trim()}>
+                    <span>Construir ciudad</span>
+                    <ArrowRight size={17} />
+                  </button>
+                </div>
+              </form>
+
+              <div className="landing-actions">
+                <button className="example-button" onClick={useExample}>
+                  Probar con un repositorio de ejemplo <ArrowRight size={13} />
+                </button>
+                <button className="example-button" onClick={loadDemo}>
+                  Ver la ciudad de demostración <ArrowRight size={13} />
+                </button>
+                <button
+                  className="quick-export"
+                  onClick={() => void exportMarkdown(url)}
+                  disabled={!url.trim() || exportState.status === "loading"}
+                >
+                  <Download size={13} /> Sólo generar contexto .MD
+                </button>
+              </div>
+            </div>
+
+            <div className="landing-features">
+              <FeatureCard icon={Building2} title="Arquitectura visible">
+                El tamaño, la altura y la posición de cada edificio reflejan complejidad, importancia y
+                centralidad reales del código, no datos decorativos.
+              </FeatureCard>
+              <FeatureCard icon={GitCompareArrows} title="Historia y Pull Requests">
+                Recorre la línea de tiempo de commits, revisa Pull Requests abiertas y observa cómo cambia el
+                skyline con cada entrega.
+              </FeatureCard>
+              <FeatureCard icon={Layers3} title="Capas de inteligencia">
+                Cambia entre estructura, complejidad, riesgo, autoría y tests para leer el mismo repositorio
+                desde ángulos distintos.
+              </FeatureCard>
+              <FeatureCard icon={Download} title="Contexto listo para IA">
+                Exporta un Markdown con la estructura y el código relevante del repositorio, listo para
+                pegarlo en tu asistente favorito.
+              </FeatureCard>
+            </div>
+
+            <div className="landing-footer-note">
+              Funciona con cualquier repositorio público · No requiere instalación · Datos leídos directamente
+              de la API de GitHub
+            </div>
           </div>
-          {baselineCity && (
-            <div className="comparison-base">
-              <GitCompareArrows size={13} /> Comparando contra <b>{baselineCity.repository.fullName}</b>
-              <button onClick={clearComparison}>
-                <X size={12} />
-              </button>
-            </div>
-          )}
-          <h1>Explora otra arquitectura</h1>
-          <p>
-            Convierte cualquier repositorio público de GitHub en un mundo 3D: los archivos son edificios, las
-            carpetas son distritos y sus dependencias trazan las calles.
-          </p>
-          <form className="repository-form" onSubmit={submit}>
-            <label htmlFor="repository-url">Repositorio público de GitHub</label>
-            <div className="input-shell">
-              <Github size={18} />
-              <input
-                id="repository-url"
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder="github.com/usuario/repositorio"
-                autoComplete="url"
-                spellCheck={false}
-              />
-              <button type="submit" aria-label="Construir ciudad" disabled={!url.trim()}>
-                <ArrowRight size={18} />
-              </button>
-            </div>
-          </form>
-          <button className="example-button" onClick={useExample}>
-            O prueba con un repositorio de ejemplo <ArrowRight size={13} />
-          </button>
-          <button className="example-button" onClick={loadDemo}>
-            Volver a la ciudad de demostración <ArrowRight size={13} />
-          </button>
-          <button
-            className="quick-export"
-            onClick={() => void exportMarkdown(url)}
-            disabled={!url.trim() || exportState.status === "loading"}
-          >
-            <Download size={13} /> Sólo generar contexto .MD
-          </button>
         </section>
       )}
 

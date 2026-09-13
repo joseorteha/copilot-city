@@ -94,7 +94,10 @@ export function createRoads(plans: DistrictPlan[], analysis: RepositoryAnalysis)
     });
   };
 
-  const portals = new Map<string, { north: Position2D; south: Position2D; west: Position2D; east: Position2D }>();
+  const portals = new Map<
+    string,
+    { north: Position2D; south: Position2D; west: Position2D; east: Position2D }
+  >();
   for (const plan of plans) {
     const [x, z] = plan.position;
     const halfW = plan.size[0] / 2 - 0.7;
@@ -144,10 +147,42 @@ export function createRoads(plans: DistrictPlan[], analysis: RepositoryAnalysis)
         "street",
       );
     }
-    add(`portal:${plan.id}:north`, [x,crossStreets[0]], districtPortals.north, 1.72, 0, [plan.id,plan.id], "avenue");
-    add(`portal:${plan.id}:south`, [x,crossStreets.at(-1)!], districtPortals.south, 1.72, 0, [plan.id,plan.id], "avenue");
-    add(`portal:${plan.id}:west`, [x-halfW,middleStreet], districtPortals.west, 1.5, 0, [plan.id,plan.id], "street");
-    add(`portal:${plan.id}:east`, [x+halfW,middleStreet], districtPortals.east, 1.5, 0, [plan.id,plan.id], "street");
+    add(
+      `portal:${plan.id}:north`,
+      [x, crossStreets[0]],
+      districtPortals.north,
+      1.72,
+      0,
+      [plan.id, plan.id],
+      "avenue",
+    );
+    add(
+      `portal:${plan.id}:south`,
+      [x, crossStreets.at(-1)!],
+      districtPortals.south,
+      1.72,
+      0,
+      [plan.id, plan.id],
+      "avenue",
+    );
+    add(
+      `portal:${plan.id}:west`,
+      [x - halfW, middleStreet],
+      districtPortals.west,
+      1.5,
+      0,
+      [plan.id, plan.id],
+      "street",
+    );
+    add(
+      `portal:${plan.id}:east`,
+      [x + halfW, middleStreet],
+      districtPortals.east,
+      1.5,
+      0,
+      [plan.id, plan.id],
+      "street",
+    );
   }
 
   const districtByFile = new Map(analysis.files.map((file) => [file.id, file.district]));
@@ -199,10 +234,23 @@ export function createRoads(plans: DistrictPlan[], analysis: RepositoryAnalysis)
   };
 
   for (const [key, { a, b, strength }] of selectedPairs) {
-    const dx=b.position[0]-a.position[0], dz=b.position[1]-a.position[1];
-    const horizontal=Math.abs(dx)>Math.abs(dz);
-    const aPortal=horizontal ? (dx>0?portals.get(a.id)!.east:portals.get(a.id)!.west) : (dz>0?portals.get(a.id)!.south:portals.get(a.id)!.north);
-    const bPortal=horizontal ? (dx>0?portals.get(b.id)!.west:portals.get(b.id)!.east) : (dz>0?portals.get(b.id)!.north:portals.get(b.id)!.south);
+    const dx = b.position[0] - a.position[0],
+      dz = b.position[1] - a.position[1];
+    const horizontal = Math.abs(dx) > Math.abs(dz);
+    const aPortal = horizontal
+      ? dx > 0
+        ? portals.get(a.id)!.east
+        : portals.get(a.id)!.west
+      : dz > 0
+        ? portals.get(a.id)!.south
+        : portals.get(a.id)!.north;
+    const bPortal = horizontal
+      ? dx > 0
+        ? portals.get(b.id)!.west
+        : portals.get(b.id)!.east
+      : dz > 0
+        ? portals.get(b.id)!.north
+        : portals.get(b.id)!.south;
     const path = corridor(aPortal, bPortal, plans);
     for (let index = 1; index < path.length; index++) {
       const from = path[index - 1],

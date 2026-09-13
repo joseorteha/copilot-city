@@ -84,6 +84,16 @@ const PATTERNS: Record<FacadePattern, PatternSpec> = {
     litRatio: 0.18,
     pilaster: 0.1,
   },
+  // Curtain wall is painted by its own branch below; these values are only a fallback.
+  curtain: {
+    width: 0.92,
+    height: 0.82,
+    top: 0.06,
+    lights: 3,
+    transom: true,
+    litRatio: 0.5,
+    pilaster: 0,
+  },
 };
 
 /** Deterministic per-cell noise so every build renders the same city. */
@@ -112,6 +122,60 @@ function paintTile(pattern: FacadePattern, kind: FacadeMapKind) {
           : "#000000";
   context.fillStyle = wall;
   context.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Curtain wall: a continuous reflective glass skin with thin mullions, not punched
+  // windows. This is what reads as a modern glass skyscraper rather than a concrete slab.
+  if (pattern === "curtain") {
+    const mullion = 6;
+    if (kind === "albedo") {
+      // Bright sky-blue glass with a vertical gradient (lighter at the top, as if catching
+      // the sky) plus spandrel bands and light mullions. A LIGHT base is what keeps the
+      // tower from going black — glass reads by its own colour, reflections only add sparkle.
+      const sky = context.createLinearGradient(0, 0, 0, canvas.height);
+      sky.addColorStop(0, "#9fc0d2");
+      sky.addColorStop(0.5, "#7ba0b5");
+      sky.addColorStop(1, "#5f8397");
+      context.fillStyle = sky;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      for (let floor = 0; floor <= TILE_FLOORS; floor += 1) {
+        context.fillStyle = "#4d6f80";
+        context.fillRect(0, floor * CELL - 4, canvas.width, 7);
+      }
+      context.fillStyle = "#cfe0e8";
+      for (let bay = 0; bay <= TILE_BAYS; bay += 1)
+        context.fillRect(bay * CELL - mullion / 2, 0, mullion, canvas.height);
+    } else if (kind === "surface") {
+      // Dielectric glass: low-ish roughness (green) for a soft mirror, and LOW metalness
+      // (blue) so it never turns into a black chrome slab. Mullions are matte metal.
+      context.fillStyle = "#00281f";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#005a2a";
+      for (let bay = 0; bay <= TILE_BAYS; bay += 1)
+        context.fillRect(bay * CELL - mullion / 2, 0, mullion, canvas.height);
+      for (let floor = 0; floor <= TILE_FLOORS; floor += 1)
+        context.fillRect(0, floor * CELL - 2, canvas.width, 4);
+    } else if (kind === "height") {
+      context.fillStyle = "#6f6f6f";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#d0d0d0";
+      for (let bay = 0; bay <= TILE_BAYS; bay += 1)
+        context.fillRect(bay * CELL - mullion / 2, 0, mullion, canvas.height);
+      context.fillStyle = "#3a3a3a";
+      for (let floor = 0; floor <= TILE_FLOORS; floor += 1)
+        context.fillRect(0, floor * CELL - 2, canvas.width, 4);
+    } else {
+      // emissive: whole lit floors, a warm/cool mix, so night towers glow by storey.
+      for (let floor = 0; floor < TILE_FLOORS; floor += 1)
+        for (let bay = 0; bay < TILE_BAYS; bay += 1) {
+          if (cellNoise(bay, floor, 3) > 0.4) continue;
+          const cool = cellNoise(bay, floor, 21) > 0.7;
+          const strength = 0.34 + cellNoise(bay, floor, 9) * 0.4;
+          context.fillStyle = cool ? `rgba(200, 226, 255, ${strength})` : `rgba(255, 220, 158, ${strength})`;
+          context.fillRect(bay * CELL + mullion, floor * CELL + 5, CELL - mullion * 2, CELL - 12);
+        }
+    }
+    return canvas;
+  }
 
   for (let floor = 0; floor < TILE_FLOORS; floor += 1) {
     const floorTop = floor * CELL;

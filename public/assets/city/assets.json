@@ -48,6 +48,22 @@
       "source": "https://kenney.nl/assets/car-kit",
       "license": "CC0-1.0",
       "bytes": 12371
+    },
+    {
+      "path": "nature/tree.glb",
+      "title": "Stylized Tree",
+      "creator": "Kenney",
+      "source": "https://github.com/KenneyNL/Starter-Kit-Basic-Scene",
+      "license": "CC0-1.0",
+      "bytes": 34164
+    },
+    {
+      "path": "nature/Textures/colormap.png",
+      "title": "Basic Scene colormap",
+      "creator": "Kenney",
+      "source": "https://github.com/KenneyNL/Starter-Kit-Basic-Scene",
+      "license": "CC0-1.0",
+      "bytes": 10306
     }
   ]
 }
