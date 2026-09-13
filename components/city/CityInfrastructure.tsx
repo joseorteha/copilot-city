@@ -12,9 +12,9 @@ import {
   CylinderGeometry,
   Euler,
   Float32BufferAttribute,
-  Group,
   InstancedMesh,
   Matrix4,
+  Mesh,
   MeshBasicMaterial,
   Object3D,
   Quaternion,
@@ -102,38 +102,78 @@ function vertexTint(geometry: BufferGeometry, color: string) {
 
 const TREE_MODEL = "/assets/city/nature/tree.glb";
 
-/** Normalises a Kenney kit model to a target footprint, sitting on the ground. */
-function useKitModel(url: string, target: number) {
-  const gltf = useGLTF(url);
-  return useMemo(() => {
-    const box = new Box3().setFromObject(gltf.scene);
-    const size = box.getSize(new Vector3());
-    const footprint = Math.max(size.x, size.z) || 1;
-    const scale = target / footprint;
-    return { scene: gltf.scene, scale, dy: -box.min.y * scale };
-  }, [gltf, target]);
-}
-
-/** One cloned CC0 tree cluster — real foliage instead of an icosahedron blob. */
-function KitTree({
-  url,
-  position,
-  rotation,
-  size,
-}: {
-  url: string;
+interface TreeSpot {
   position: Position3D;
   rotation: number;
   size: number;
-}) {
-  const model = useKitModel(url, size);
+}
+
+/**
+ * The authored tree is one mesh, so all trees can share one geometry, material and draw.
+ * Previously every planting mounted a full <Clone>, which made the prettiest revision of
+ * the city its slowest one. Per-instance colour and non-uniform scale keep the rows from
+ * reading as stamped copies.
+ */
+function InstancedKitTrees({ trees }: { trees: TreeSpot[] }) {
+  const gltf = useGLTF(TREE_MODEL, false, true);
+  const quality = useCityStore((state) => state.quality);
+  const ref = useRef<InstancedMesh>(null);
+  const asset = useMemo(() => {
+    gltf.scene.updateMatrixWorld(true);
+    let source: Mesh | null = null;
+    gltf.scene.traverse((object) => {
+      if (!source && object instanceof Mesh) source = object;
+    });
+    if (!source) return null;
+    const mesh = source as Mesh;
+    const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox?.clone() ?? new Box3();
+    const size = box.getSize(new Vector3());
+    const material = Array.isArray(mesh.material) ? mesh.material[0].clone() : mesh.material.clone();
+    if ("roughness" in material) material.roughness = 0.92;
+    if ("metalness" in material) material.metalness = 0;
+    return { geometry, material, box, footprint: Math.max(size.x, size.z) || 1 };
+  }, [gltf]);
+
+  useLayoutEffect(() => {
+    if (!asset || !ref.current) return;
+    const dummy = new Object3D();
+    const palette = ["#73866a", "#687c61", "#7f8e6c", "#61755e"];
+    trees.forEach((tree, index) => {
+      const scale = tree.size / asset.footprint;
+      const broadleaf = index % 5 !== 0;
+      dummy.position.set(tree.position[0], tree.position[1] - asset.box.min.y * scale, tree.position[2]);
+      dummy.rotation.set(0, tree.rotation, 0);
+      dummy.scale.set(
+        scale * (broadleaf ? 1.12 : 0.82),
+        scale * (broadleaf ? 0.86 : 1.08),
+        scale * (broadleaf ? 1.06 : 0.82),
+      );
+      dummy.updateMatrix();
+      ref.current?.setMatrixAt(index, dummy.matrix);
+      ref.current?.setColorAt(index, new Color(palette[index % palette.length]));
+    });
+    ref.current.instanceMatrix.needsUpdate = true;
+    if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true;
+    ref.current.computeBoundingSphere();
+  }, [asset, trees]);
+
+  useEffect(
+    () => () => {
+      asset?.geometry.dispose();
+      asset?.material.dispose();
+    },
+    [asset],
+  );
+
+  if (!asset) return null;
   return (
-    <Clone
-      object={model.scene}
-      position={[position[0], position[1] + model.dy, position[2]]}
-      rotation={[0, rotation, 0]}
-      scale={model.scale}
-      castShadow
+    <instancedMesh
+      name="trees:kit"
+      ref={ref}
+      args={[asset.geometry, asset.material, trees.length]}
+      castShadow={quality === "high"}
       receiveShadow
     />
   );
@@ -141,7 +181,7 @@ function KitTree({
 
 function UrbanForest({ city }: { city: CityModel }) {
   const trees = useMemo(() => {
-    const spots: { position: Position3D; rotation: number; size: number }[] = [];
+    const spots: TreeSpot[] = [];
     const clearOfCity = (x: number, z: number) =>
       city.buildings.every((b) => Math.hypot(x - b.position[0], z - b.position[2]) > 2) &&
       city.roads.every((road) => distanceToRoad(x, z, road) > road.width / 2 + 0.7);
@@ -178,19 +218,7 @@ function UrbanForest({ city }: { city: CityModel }) {
     return spots.slice(0, 64);
   }, [city.buildings, city.districts, city.roads]);
 
-  return (
-    <group>
-      {trees.map((tree, index) => (
-        <KitTree
-          key={index}
-          url={TREE_MODEL}
-          position={tree.position}
-          rotation={tree.rotation}
-          size={tree.size}
-        />
-      ))}
-    </group>
-  );
+  return <InstancedKitTrees trees={trees} />;
 }
 
 type VehicleKind = "sedan" | "suv" | "taxi" | "van" | "bus";
@@ -359,40 +387,81 @@ function useCarNormalisation(url: string) {
 }
 
 /**
- * A single authored CC0 car cloned onto the map and animated along its road. Rendered with
- * drei's <Clone> — the same proven path Explore uses — instead of instancing, because
- * instancing these GLBs corrupted the frame. Traffic is capped so the draw-call cost stays
- * modest even at map scale.
+ * Authored CC0 cars animated along their roads. The model transform is baked once and every
+ * vehicle of one type shares a single instanced draw, including deterministic paint tint.
  */
-function MovingCar({ url, unit }: { url: string; unit: TrafficUnit }) {
+function MovingCarFleet({ url, units }: { url: string; units: TrafficUnit[] }) {
   const gltf = useGLTF(url, false, true);
   const norm = useCarNormalisation(url);
-  const group = useRef<Group>(null);
+  const ref = useRef<InstancedMesh>(null);
+  const asset = useMemo(() => {
+    gltf.scene.updateMatrixWorld(true);
+    let source: Mesh | null = null;
+    gltf.scene.traverse((object) => {
+      if (!source && object instanceof Mesh) source = object;
+    });
+    if (!source) return null;
+    const mesh = source as Mesh;
+    const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+    const material = Array.isArray(mesh.material) ? mesh.material[0].clone() : mesh.material.clone();
+    if ("roughness" in material) material.roughness = 0.48;
+    return { geometry, material };
+  }, [gltf]);
+
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    units.forEach((unit, index) => ref.current?.setColorAt(index, unit.color));
+    if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true;
+  }, [units]);
+
   useFrame(({ clock }) => {
-    if (!group.current) return;
-    const raw = (clock.elapsedTime * unit.speed + unit.offset) % 1;
-    const eased = 0.08 + raw * 0.84;
-    const progress = unit.lane > 0 ? eased : 1 - eased;
-    const dx = unit.road.to[0] - unit.road.from[0];
-    const dz = unit.road.to[1] - unit.road.from[1];
-    const laneOffset = unit.lane * unit.road.width * 0.24;
-    group.current.position.set(
-      unit.road.from[0] + dx * progress + unit.nx * laneOffset,
-      unit.road.kind === "bridge" ? 0.6 : 0.03,
-      unit.road.from[1] + dz * progress + unit.nz * laneOffset,
+    if (!ref.current || !asset) return;
+    const base = new Matrix4();
+    const normal = new Matrix4().compose(
+      new Vector3(norm.dx, norm.dy, norm.dz),
+      new Quaternion(),
+      new Vector3(norm.scale, norm.scale, norm.scale),
     );
-    group.current.rotation.y = Math.atan2(dx * unit.lane, dz * unit.lane) + (norm.swap ? Math.PI / 2 : 0);
+    const dummy = new Object3D();
+    units.forEach((unit, index) => {
+      const raw = (clock.elapsedTime * unit.speed + unit.offset) % 1;
+      const eased = 0.08 + raw * 0.84;
+      const progress = unit.lane > 0 ? eased : 1 - eased;
+      const dx = unit.road.to[0] - unit.road.from[0];
+      const dz = unit.road.to[1] - unit.road.from[1];
+      const laneOffset = unit.lane * unit.road.width * 0.24;
+      dummy.position.set(
+        unit.road.from[0] + dx * progress + unit.nx * laneOffset,
+        unit.road.kind === "bridge" ? 0.6 : 0.03,
+        unit.road.from[1] + dz * progress + unit.nz * laneOffset,
+      );
+      dummy.rotation.set(0, Math.atan2(dx * unit.lane, dz * unit.lane) + (norm.swap ? Math.PI / 2 : 0), 0);
+      dummy.scale.set(...unit.scale);
+      dummy.updateMatrix();
+      base.multiplyMatrices(dummy.matrix, normal);
+      ref.current?.setMatrixAt(index, base);
+    });
+    ref.current.instanceMatrix.needsUpdate = true;
   });
+
+  useEffect(
+    () => () => {
+      asset?.geometry.dispose();
+      asset?.material.dispose();
+    },
+    [asset],
+  );
+
+  if (!asset || !units.length) return null;
   return (
-    <group ref={group} scale={unit.scale[0]}>
-      <Clone
-        object={gltf.scene}
-        position={[norm.dx, norm.dy, norm.dz]}
-        scale={norm.scale}
-        castShadow
-        receiveShadow
-      />
-    </group>
+    <instancedMesh
+      name={`vehicles:${url.split("/").pop()?.replace(".glb", "") ?? "car"}`}
+      ref={ref}
+      args={[asset.geometry, asset.material, units.length]}
+      frustumCulled={false}
+      castShadow={false}
+      receiveShadow
+    />
   );
 }
 
@@ -410,7 +479,6 @@ function DataTraffic({ city }: { city: CityModel }) {
     // Only real streets and avenues carry cars, longest first, so traffic spreads across the
     // whole city instead of piling onto whichever segments happened to come first.
     const drivable = city.roads
-      .filter((road) => road.kind !== "bridge" || true)
       .map((road, roadIndex) => {
         const dx = road.to[0] - road.from[0];
         const dz = road.to[1] - road.from[1];
@@ -462,15 +530,18 @@ function DataTraffic({ city }: { city: CityModel }) {
     }
     return output;
   }, [city.roads]);
-  // Cloned GLB cars are pricier than instances, so the moving map fleet is capped; the bus
-  // (no GLB) still rides as the procedural mesh.
-  const glbUnits = (["sedan", "suv", "taxi", "van"] as const)
-    .flatMap((kind) => fleets[kind].map((unit) => ({ kind, unit })))
-    .slice(0, 26);
+  // Keep a legible amount of map traffic while respecting the visible-triangle budget; the
+  // bus (no GLB) remains a separate procedural instanced fleet.
+  const remaining = { value: 18 };
+  const glbFleets = (["sedan", "suv", "taxi", "van"] as const).map((kind) => {
+    const units = fleets[kind].slice(0, remaining.value);
+    remaining.value -= units.length;
+    return { kind, units };
+  });
   return (
     <group>
-      {glbUnits.map(({ kind, unit }, index) => (
-        <MovingCar key={`${kind}:${index}`} url={VEHICLE_MODELS[kind]} unit={unit} />
+      {glbFleets.map(({ kind, units }) => (
+        <MovingCarFleet key={kind} url={VEHICLE_MODELS[kind]} units={units} />
       ))}
       {fleets.bus.length ? <VehicleFleet kind="bus" units={fleets.bus} /> : null}
     </group>

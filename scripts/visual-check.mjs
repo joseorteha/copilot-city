@@ -32,7 +32,17 @@ const url = process.argv.find((argument) => argument.startsWith("http")) ?? "htt
 const focusMode = process.argv.includes("--focus");
 const exploreMode = process.argv.includes("--explore");
 const nightMode = process.argv.includes("--night");
-const suffix = [focusMode && "focus", exploreMode && "explore", nightMode && "night"]
+const demoMode = process.argv.includes("--demo");
+const lowMode = process.argv.includes("--low");
+const highMode = process.argv.includes("--high");
+const suffix = [
+  demoMode && "demo",
+  focusMode && "focus",
+  exploreMode && "explore",
+  nightMode && "night",
+  lowMode && "low",
+  highMode && "high",
+]
   .filter(Boolean)
   .map((part) => `-${part}`)
   .join("");
@@ -60,7 +70,23 @@ page.on("console", (message) => {
 });
 page.on("pageerror", (error) => errors.push(error.message));
 
-await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+
+if (demoMode) {
+  await page.getByRole("button", { name: /Ver la ciudad de demostración/i }).click();
+}
+
+if (lowMode || highMode) {
+  const target = lowMode ? "low" : "high";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const quality = await page
+      .getByRole("button", { name: /Cambiar calidad gráfica/i })
+      .getAttribute("aria-label");
+    if (quality?.endsWith(target)) break;
+    await page.getByRole("button", { name: /Cambiar calidad gráfica/i }).click();
+  }
+}
+
 // The city rises with a staggered reveal; sampling earlier captures a half-built skyline.
 await page.waitForTimeout(Number(process.env.VISUAL_SETTLE_MS ?? 12000));
 

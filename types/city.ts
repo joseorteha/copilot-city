@@ -46,6 +46,8 @@ export interface CityBuilding {
   name: string;
   path: string;
   districtId: string;
+  neighborhoodId: string;
+  neighborhoodName: string;
   position: Position3D;
   rotation: number;
   width: number;

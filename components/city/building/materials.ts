@@ -1,4 +1,4 @@
-import { Color, Material, MeshPhysicalMaterial, MeshStandardMaterial } from "three";
+import { Color, Material, MeshStandardMaterial } from "three";
 
 import { facadeMap } from "./facade-texture";
 import { profileFor } from "./archetypes";
@@ -107,12 +107,10 @@ function surfaceSet(tone: BuildingTone, night: boolean): SurfaceSet {
       envMapIntensity: 1,
     }),
     green: new MeshStandardMaterial({ color: palette.green, roughness: 0.98, metalness: 0 }),
-    glass: new MeshPhysicalMaterial({
+    glass: new MeshStandardMaterial({
       color: palette.glass,
-      roughness: 0.06,
-      metalness: 0.45,
-      clearcoat: 1,
-      clearcoatRoughness: 0.08,
+      roughness: 0.12,
+      metalness: 0.58,
       envMapIntensity: 2.4,
       emissive: new Color(palette.light),
       emissiveIntensity: night ? 0.5 : 0,

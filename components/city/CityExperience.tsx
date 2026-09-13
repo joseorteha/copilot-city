@@ -19,19 +19,23 @@ import {
   Layers3,
   LocateFixed,
   Map,
+  MapPinned,
   Moon,
   Route,
   Search,
   Sparkles,
   Sun,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CityErrorBoundary } from "@/components/city/CityErrorBoundary";
 import { DragHandle, useDraggable } from "@/components/ui/draggable";
 import { CityIntelligence } from "@/components/panels/CityIntelligence";
+import { CityMinimap } from "@/components/panels/CityMinimap";
 import { ARCHETYPE_LABELS } from "@/lib/city/buildings";
 import { useCityStore } from "@/store/city-store";
 import type { CityLayer } from "@/types/city";
@@ -90,6 +94,73 @@ function FeatureCard({
   );
 }
 
+function useOptionalCityAmbience(active: boolean) {
+  const [enabled, setEnabled] = useState(false);
+  const audio = useRef<{ context: AudioContext; sources: AudioScheduledSourceNode[] } | null>(null);
+
+  const stop = useCallback(() => {
+    audio.current?.sources.forEach((source) => {
+      try {
+        source.stop();
+      } catch {
+        // A source may already have stopped while the page was backgrounded.
+      }
+    });
+    void audio.current?.context.close();
+    audio.current = null;
+    setEnabled(false);
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (audio.current) {
+      stop();
+      return;
+    }
+    const context = new AudioContext();
+    const master = context.createGain();
+    master.gain.value = 0.032;
+    master.connect(context.destination);
+
+    const seconds = 3;
+    const buffer = context.createBuffer(1, context.sampleRate * seconds, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    let previous = 0;
+    for (let index = 0; index < data.length; index += 1) {
+      const white = Math.random() * 2 - 1;
+      previous = (previous + 0.018 * white) / 1.018;
+      data[index] = previous * 2.4;
+    }
+    const wind = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 520;
+    filter.Q.value = 0.35;
+    wind.buffer = buffer;
+    wind.loop = true;
+    wind.connect(filter).connect(master);
+
+    const cityHum = context.createOscillator();
+    const humGain = context.createGain();
+    cityHum.type = "sine";
+    cityHum.frequency.value = 54;
+    humGain.gain.value = 0.06;
+    cityHum.connect(humGain).connect(master);
+    wind.start();
+    cityHum.start();
+    void context.resume();
+    audio.current = { context, sources: [wind, cityHum] };
+    setEnabled(true);
+  }, [stop]);
+
+  useEffect(() => {
+    if (!active && audio.current) stop();
+    return () => {
+      if (audio.current) stop();
+    };
+  }, [active, stop]);
+  return { enabled, toggle };
+}
+
 export function CityExperience() {
   const status = useCityStore((state) => state.status);
   const city = useCityStore((state) => state.city);
@@ -120,6 +191,8 @@ export function CityExperience() {
   const [intelligenceTab, setIntelligenceTab] = useState<"layers" | "git">("layers");
   const [query, setQuery] = useState("");
   const [hintDismissed, setHintDismissed] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(true);
+  const ambience = useOptionalCityAmbience(status === "ready");
   const inspectorDrag = useDraggable();
   const searchDrag = useDraggable();
   const [exportState, setExportState] = useState<{
@@ -576,6 +649,22 @@ export function CityExperience() {
 
           <nav className="scene-tools" aria-label="Dirección visual">
             <button
+              className={minimapOpen ? "active" : ""}
+              onClick={() => setMinimapOpen((value) => !value)}
+              title={minimapOpen ? "Ocultar minimapa" : "Mostrar minimapa"}
+              aria-label={minimapOpen ? "Ocultar minimapa" : "Mostrar minimapa"}
+            >
+              <MapPinned size={16} />
+            </button>
+            <button
+              className={ambience.enabled ? "active" : ""}
+              onClick={ambience.toggle}
+              title={ambience.enabled ? "Silenciar ambiente" : "Activar ambiente sonoro"}
+              aria-label={ambience.enabled ? "Silenciar ambiente" : "Activar ambiente sonoro"}
+            >
+              {ambience.enabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+            <button
               onClick={() => setVisualMode(visualMode === "day" ? "night" : "day")}
               title={visualMode === "day" ? "Activar noche analítica" : "Activar luz diurna"}
               aria-label={visualMode === "day" ? "Activar noche analítica" : "Activar luz diurna"}
@@ -605,6 +694,8 @@ export function CityExperience() {
               <small>{quality === "auto" ? "A" : quality === "high" ? "H" : "L"}</small>
             </button>
           </nav>
+
+          {minimapOpen && <CityMinimap city={activeCity} onClose={() => setMinimapOpen(false)} />}
 
           {intelligenceOpen && !selectedBuilding && (
             <CityIntelligence city={activeCity} tab={intelligenceTab} />
@@ -665,6 +756,10 @@ export function CityExperience() {
               </div>
               <h2>{selectedBuilding.name}</h2>
               <code>{selectedBuilding.path}</code>
+              <div className="inspector-location">
+                Distrito <b>{selectedBuilding.districtId}</b>
+                <span /> Barrio <b>{selectedBuilding.neighborhoodName}</b>
+              </div>
               <div className="importance">
                 <span>Relevancia arquitectónica</span>
                 <strong>{Math.round(selectedBuilding.importance * 100)}%</strong>
