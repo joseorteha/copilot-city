@@ -80,7 +80,7 @@ export function CityLighting({ bounds }: { bounds: CityBounds }) {
       />
       <ambientLight intensity={night ? 0.08 : 0.07} color={night ? "#7892ab" : "#cfe0ea"} />
       <directionalLight
-        castShadow
+        castShadow={quality === "high"}
         position={night ? [-sun.x * 0.8, sunDistance * 0.75, -sun.z * 0.6] : [sun.x, sun.y, sun.z]}
         intensity={night ? 1.05 : 3.9}
         color={night ? "#9fb7da" : "#ffdfb0"}

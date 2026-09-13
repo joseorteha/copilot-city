@@ -78,8 +78,8 @@ export function Building({ building, order }: { building: CityBuilding; order: n
   // rooftop detail were essentially never seen from an orbiting camera — the "I see no
   // change" problem. Detail now reaches across the framed city; "low" tightens it back for
   // weak machines, which is what that mode is for.
-  const detailReach = quality === "low" ? 16 : 95;
-  const midReach = quality === "low" ? 46 : 230;
+  const detailReach = quality === "low" ? 16 : quality === "high" ? 95 : 32;
+  const midReach = quality === "low" ? 46 : quality === "high" ? 230 : 120;
   const mapLod: [number, number, number] = selected
     ? [0, Math.max(28, detailReach), Math.max(80, midReach)]
     : viewMode === "explore"
@@ -113,6 +113,7 @@ export function Building({ building, order }: { building: CityBuilding; order: n
       <Detailed distances={mapLod} hysteresis={0.24}>
         {levels.near ? (
           <mesh
+            name={`building-near:${building.variant}`}
             geometry={levels.near.geometry}
             material={materialsFor(levels.near.kinds, materials)}
             castShadow={quality === "high" || building.importance > 0.24}
@@ -123,6 +124,7 @@ export function Building({ building, order }: { building: CityBuilding; order: n
         )}
         {levels.far ? (
           <mesh
+            name={`building-far:${building.variant}`}
             geometry={levels.far.geometry}
             material={materials.overview}
             castShadow={quality === "high" || building.isLandmark}
@@ -132,6 +134,7 @@ export function Building({ building, order }: { building: CityBuilding; order: n
           <group />
         )}
         <mesh
+          name={`building-mass:${building.variant}`}
           geometry={taperedUnit(0.86)}
           position={[0, height * 0.5 + PODIUM_HEIGHT, 0]}
           scale={[width, height, depth]}
@@ -157,7 +160,8 @@ export function Building({ building, order }: { building: CityBuilding; order: n
           <div className="building-tooltip">
             <strong>{building.name}</strong>
             <span>
-              {building.metrics.language} · {building.metrics.lines.toLocaleString("es-ES")} líneas
+              {building.neighborhoodName} · {building.metrics.language} ·{" "}
+              {building.metrics.lines.toLocaleString("es-ES")} líneas
             </span>
           </div>
         </Html>
