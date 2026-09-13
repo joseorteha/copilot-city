@@ -6,7 +6,7 @@ export interface BuildingProfile {
   fins: boolean;
   wings: boolean;
   windowDensity: number;
-  facade: "grid" | "ribbon" | "vertical" | "open" | "technical";
+  facade: "grid" | "ribbon" | "vertical" | "open" | "technical" | "curtain";
   footprint: "slab" | "terraced" | "courtyard" | "twin" | "pavilion";
 }
 
@@ -17,7 +17,7 @@ const profiles: Record<BuildingVariant, BuildingProfile> = {
     fins: true,
     wings: false,
     windowDensity: 1,
-    facade: "grid",
+    facade: "curtain",
     footprint: "slab",
   },
   tower: {
@@ -26,7 +26,7 @@ const profiles: Record<BuildingVariant, BuildingProfile> = {
     fins: true,
     wings: false,
     windowDensity: 1.2,
-    facade: "vertical",
+    facade: "curtain",
     footprint: "terraced",
   },
   terrace: {
@@ -53,7 +53,7 @@ const profiles: Record<BuildingVariant, BuildingProfile> = {
     fins: true,
     wings: true,
     windowDensity: 1.15,
-    facade: "vertical",
+    facade: "curtain",
     footprint: "twin",
   },
   industrial: {

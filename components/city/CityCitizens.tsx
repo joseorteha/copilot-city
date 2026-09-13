@@ -58,9 +58,9 @@ function Citizen({
 }
 
 export function CityCitizens({ city }: { city: CityModel }) {
-  const viewMode=useCityStore((state)=>state.viewMode);
+  const viewMode = useCityStore((state) => state.viewMode);
   const core = city.buildings.find((building) => building.id === city.coreBuildingId) ?? city.buildings[0];
-  if (!core || viewMode!=="explore") return null;
+  if (!core || viewMode !== "explore") return null;
   return (
     <group>
       {city.insights.contributors.slice(0, 8).map((person, index) => {

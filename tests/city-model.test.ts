@@ -83,16 +83,31 @@ const edges: DependencyEdge[] = [
 
 const city = generateCity(analysisOf(files, edges));
 
-function roadIntersectsBuilding(road: (typeof city.roads)[number], building: (typeof city.buildings)[number]) {
-  const margin=road.width/2+.18;
-  const minX=building.position[0]-building.width/2-margin, maxX=building.position[0]+building.width/2+margin;
-  const minZ=building.position[2]-building.depth/2-margin, maxZ=building.position[2]+building.depth/2+margin;
-  let enter=0,leave=1;
-  for(const [start,delta,min,max] of [[road.from[0],road.to[0]-road.from[0],minX,maxX],[road.from[1],road.to[1]-road.from[1],minZ,maxZ]]) {
-    if(Math.abs(delta)<1e-8) { if(start<min||start>max) return false; }
-    else { const a=(min-start)/delta,b=(max-start)/delta; enter=Math.max(enter,Math.min(a,b)); leave=Math.min(leave,Math.max(a,b)); }
+function roadIntersectsBuilding(
+  road: (typeof city.roads)[number],
+  building: (typeof city.buildings)[number],
+) {
+  const margin = road.width / 2 + 0.18;
+  const minX = building.position[0] - building.width / 2 - margin,
+    maxX = building.position[0] + building.width / 2 + margin;
+  const minZ = building.position[2] - building.depth / 2 - margin,
+    maxZ = building.position[2] + building.depth / 2 + margin;
+  let enter = 0,
+    leave = 1;
+  for (const [start, delta, min, max] of [
+    [road.from[0], road.to[0] - road.from[0], minX, maxX],
+    [road.from[1], road.to[1] - road.from[1], minZ, maxZ],
+  ]) {
+    if (Math.abs(delta) < 1e-8) {
+      if (start < min || start > max) return false;
+    } else {
+      const a = (min - start) / delta,
+        b = (max - start) / delta;
+      enter = Math.max(enter, Math.min(a, b));
+      leave = Math.min(leave, Math.max(a, b));
+    }
   }
-  return enter<=leave && leave>=0 && enter<=1;
+  return enter <= leave && leave >= 0 && enter <= 1;
 }
 
 describe("generateCity", () => {
@@ -138,13 +153,15 @@ describe("generateCity", () => {
   });
 
   it("never sends a road through a building footprint", () => {
-    for(const road of city.roads) for(const building of city.buildings) {
-      expect(roadIntersectsBuilding(road,building),`${road.id} crosses ${building.id}`).toBe(false);
-    }
-    const demo=getDemoCity();
-    for(const road of demo.roads) for(const building of demo.buildings) {
-      expect(roadIntersectsBuilding(road,building),`demo: ${road.id} crosses ${building.id}`).toBe(false);
-    }
+    for (const road of city.roads)
+      for (const building of city.buildings) {
+        expect(roadIntersectsBuilding(road, building), `${road.id} crosses ${building.id}`).toBe(false);
+      }
+    const demo = getDemoCity();
+    for (const road of demo.roads)
+      for (const building of demo.buildings) {
+        expect(roadIntersectsBuilding(road, building), `demo: ${road.id} crosses ${building.id}`).toBe(false);
+      }
   });
 
   it("is deterministic", () => {

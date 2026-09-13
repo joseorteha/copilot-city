@@ -4,19 +4,18 @@ import { Clone, useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
+  Box3,
   BoxGeometry,
   BufferGeometry,
   CircleGeometry,
   Color,
-  ConeGeometry,
   CylinderGeometry,
   Euler,
   Float32BufferAttribute,
+  Group,
   InstancedMesh,
-  IcosahedronGeometry,
   Matrix4,
   MeshBasicMaterial,
-  MeshStandardMaterial,
   Object3D,
   Quaternion,
   Vector3,
@@ -101,297 +100,95 @@ function vertexTint(geometry: BufferGeometry, color: string) {
   return geometry;
 }
 
-/** Flat-roofed infill homes establish Mexican street scale without becoming semantic files. */
-function NeighborhoodFabric({ city }: { city: CityModel }) {
-  const bodies = useRef<InstancedMesh>(null);
-  const trims = useRef<InstancedMesh>(null);
-  const windows = useRef<InstancedMesh>(null);
-  const awnings = useRef<InstancedMesh>(null);
-  const tanks = useRef<InstancedMesh>(null);
-  const bodyGeometry = useMemo(() => new RoundedBoxGeometry(1, 1, 1, 1, 0.045), []);
-  const lots = useMemo(
-    () =>
-      city.districts.flatMap((district, districtIndex) => {
-        const [cx, cz] = district.position;
-        const [w, d] = district.size;
-        const candidates: Position3D[] = [
-          [cx - w * 0.38, 0.12, cz - d * 0.34],
-          [cx + w * 0.38, 0.12, cz - d * 0.34],
-          [cx - w * 0.38, 0.12, cz + d * 0.34],
-          [cx + w * 0.38, 0.12, cz + d * 0.34],
-          [cx - w * 0.24, 0.12, cz - d * 0.39],
-          [cx + w * 0.24, 0.12, cz + d * 0.39],
-        ];
-        return candidates
-          .filter(([x, , z]) => {
-            const awayFromFiles = city.buildings.every(
-              (building) => Math.hypot(x - building.position[0], z - building.position[2]) > 3.2,
-            );
-            const awayFromPlaza =
-              Math.hypot(x - district.plazaPosition[0], z - district.plazaPosition[1]) > 2.8;
-            const awayFromRoads = city.roads.every(
-              (road) => distanceToRoad(x, z, road) > road.width / 2 + 1.25,
-            );
-            return awayFromFiles && awayFromPlaza && awayFromRoads;
-          })
-          .slice(0, 3 + (districtIndex % 2))
-          .map((position, localIndex) => ({ position, seed: districtIndex * 11 + localIndex }));
-      }),
-    [city.buildings, city.districts, city.roads],
-  );
-  const bodyTransforms = useMemo(
-    () =>
-      lots.map(({ position: [x, , z], seed }) => ({
-        position: [x, 0.64 + (seed % 3) * 0.12, z] as Position3D,
-        scale: [1.5 + (seed % 2) * 0.34, 1.02 + (seed % 3) * 0.24, 1.16] as Position3D,
-        rotation: [0, (seed % 4) * (Math.PI / 2), 0] as Position3D,
-      })),
-    [lots],
-  );
-  const trimTransforms = useMemo(
-    () =>
-      bodyTransforms.map((item) => ({
-        ...item,
-        position: [item.position[0], item.position[1] * 2 + 0.06, item.position[2]] as Position3D,
-        scale: [item.scale![0] * 1.04, 0.1, item.scale![2] * 1.04] as Position3D,
-      })),
-    [bodyTransforms],
-  );
-  const windowTransforms = useMemo(
-    () =>
-      bodyTransforms.map((item) => ({
-        position: [
-          item.position[0],
-          item.position[1] * 0.95,
-          item.position[2] + item.scale![2] * 0.505,
-        ] as Position3D,
-        scale: [item.scale![0] * 0.58, item.scale![1] * 0.35, 0.035] as Position3D,
-        rotation: item.rotation,
-      })),
-    [bodyTransforms],
-  );
-  const awningTransforms = useMemo(
-    () =>
-      bodyTransforms.map((item) => ({
-        position: [
-          item.position[0],
-          item.position[1] * 1.32,
-          item.position[2] + item.scale![2] * 0.64,
-        ] as Position3D,
-        scale: [item.scale![0] * 0.68, 0.08, 0.42] as Position3D,
-        rotation: [0, item.rotation![1], -0.08] as Position3D,
-      })),
-    [bodyTransforms],
-  );
-  const tankTransforms = useMemo(
-    () =>
-      bodyTransforms.map((item, index) => ({
-        position: [
-          item.position[0] + 0.28,
-          item.position[1] * 2 + 0.38,
-          item.position[2] - 0.2,
-        ] as Position3D,
-        scale: [0.22 + (index % 2) * 0.03, 0.42, 0.22 + (index % 2) * 0.03] as Position3D,
-      })),
-    [bodyTransforms],
-  );
-  useInstanceTransforms(bodies, bodyTransforms);
-  useInstanceTransforms(trims, trimTransforms);
-  useInstanceTransforms(windows, windowTransforms);
-  useInstanceTransforms(awnings, awningTransforms);
-  useInstanceTransforms(tanks, tankTransforms);
-  useEffect(() => () => bodyGeometry.dispose(), [bodyGeometry]);
+const TREE_MODEL = "/assets/city/nature/tree.glb";
 
-  return (
-    <group>
-      <instancedMesh ref={bodies} args={[bodyGeometry, undefined, lots.length]} castShadow receiveShadow>
-        <meshStandardMaterial color="#c9b38e" roughness={0.88} />
-      </instancedMesh>
-      <instancedMesh ref={trims} args={[undefined, undefined, lots.length]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial color="#eadfc9" roughness={0.78} />
-      </instancedMesh>
-      <instancedMesh ref={windows} args={[undefined, undefined, lots.length]}>
-        <boxGeometry />
-        <meshPhysicalMaterial color="#285667" roughness={0.12} metalness={0.2} clearcoat={0.8} />
-      </instancedMesh>
-      <instancedMesh ref={awnings} args={[undefined, undefined, lots.length]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial color="#915142" roughness={0.68} />
-      </instancedMesh>
-      <instancedMesh ref={tanks} args={[undefined, undefined, lots.length]} castShadow>
-        <cylinderGeometry args={[1, 1, 1, 12]} />
-        <meshStandardMaterial color="#222c2b" roughness={0.72} />
-      </instancedMesh>
-    </group>
-  );
+/** Normalises a Kenney kit model to a target footprint, sitting on the ground. */
+function useKitModel(url: string, target: number) {
+  const gltf = useGLTF(url);
+  return useMemo(() => {
+    const box = new Box3().setFromObject(gltf.scene);
+    const size = box.getSize(new Vector3());
+    const footprint = Math.max(size.x, size.z) || 1;
+    const scale = target / footprint;
+    return { scene: gltf.scene, scale, dy: -box.min.y * scale };
+  }, [gltf, target]);
 }
 
-type TreeKind = "jacaranda" | "ficus" | "palm";
-
-function treeGeometry(kind: TreeKind) {
-  const trunkParts: BufferGeometry[] = [];
-  const leafParts: BufferGeometry[] = [];
-  const trunk = new CylinderGeometry(0.72, 1, 1, 7);
-  // Several angular lobes read as real irregular foliage; an icosahedron is also almost
-  // half the triangle cost of the former dodecahedron once instanced across the city.
-  const leaf = new IcosahedronGeometry(1, 0);
-  if (kind === "palm") {
-    for (let segment = 0; segment < 4; segment += 1)
-      trunkParts.push(
-        transformed(
-          trunk,
-          [0.03 * segment, 0.42 + segment * 0.42, 0],
-          [0.12 - segment * 0.012, 0.86, 0.12 - segment * 0.012],
-          [0, 0, -0.04],
-        ),
-      );
-    for (let frond = 0; frond < 9; frond += 1) {
-      const angle = (frond / 9) * Math.PI * 2;
-      leafParts.push(
-        transformed(
-          new ConeGeometry(0.28, 1.8, 5),
-          [Math.sin(angle) * 0.62, 1.92, Math.cos(angle) * 0.62],
-          [1, 1, 0.32],
-          [Math.PI / 2.7, angle, -Math.sin(angle) * 0.2],
-        ),
-      );
-    }
-  } else {
-    trunkParts.push(transformed(trunk, [0, 0.62, 0], [0.13, 1.24, 0.13]));
-    for (let branch = 0; branch < 4; branch += 1) {
-      const angle = (branch / 4) * Math.PI * 2 + (kind === "jacaranda" ? 0.4 : 0);
-      trunkParts.push(
-        transformed(
-          trunk,
-          [Math.sin(angle) * 0.2, 1.22, Math.cos(angle) * 0.2],
-          [0.055, 0.76, 0.055],
-          [Math.cos(angle) * 0.56, 0, -Math.sin(angle) * 0.56],
-        ),
-      );
-    }
-    const lobes = kind === "jacaranda" ? 5 : 4;
-    for (let lobe = 0; lobe < lobes; lobe += 1) {
-      const angle = (lobe / lobes) * Math.PI * 2;
-      const center = lobe === 0;
-      leafParts.push(
-        transformed(
-          leaf,
-          center ? [0, 1.72, 0] : [Math.sin(angle) * 0.48, 1.62 + (lobe % 2) * 0.14, Math.cos(angle) * 0.48],
-          center
-            ? [0.68, kind === "jacaranda" ? 0.5 : 0.72, 0.68]
-            : [0.48, kind === "jacaranda" ? 0.38 : 0.56, 0.48],
-          [0, angle * 0.7, 0],
-        ),
-      );
-    }
-  }
-  trunk.dispose();
-  leaf.dispose();
-  return { trunk: merged(trunkParts), leaves: merged(leafParts) };
-}
-
-function TreeFamily({ kind, transforms }: { kind: TreeKind; transforms: InstanceTransform[] }) {
-  const trunks = useRef<InstancedMesh>(null);
-  const leaves = useRef<InstancedMesh>(null);
-  const quality = useCityStore((state) => state.quality);
-  const geometry = useMemo(() => treeGeometry(kind), [kind]);
-  const foliage = useMemo(() => {
-    const material = new MeshStandardMaterial({
-      color: kind === "jacaranda" ? "#776582" : kind === "palm" ? "#4f7251" : "#41634c",
-      roughness: 0.94,
-      envMapIntensity: 0.52,
-    });
-    material.onBeforeCompile = (shader) => {
-      shader.uniforms.uCityWind = { value: 0 };
-      material.userData.shader = shader;
-      shader.vertexShader = shader.vertexShader
-        .replace("#include <common>", "#include <common>\nuniform float uCityWind;")
-        .replace(
-          "#include <begin_vertex>",
-          "#include <begin_vertex>\ntransformed.x += sin(uCityWind * .72 + position.y * 2.1 + position.z) * .018 * max(position.y, 0.);",
-        );
-    };
-    material.customProgramCacheKey = () => "copilot-city-foliage-v1";
-    return material;
-  }, [kind]);
-  useInstanceTransforms(trunks, transforms);
-  useInstanceTransforms(leaves, transforms);
-  useFrame(({ clock }) => {
-    const shader = foliage.userData.shader;
-    if (shader && quality !== "low") shader.uniforms.uCityWind.value = clock.elapsedTime;
-  });
-  useEffect(
-    () => () => {
-      geometry.trunk.dispose();
-      geometry.leaves.dispose();
-      foliage.dispose();
-    },
-    [foliage, geometry],
-  );
+/** One cloned CC0 tree cluster — real foliage instead of an icosahedron blob. */
+function KitTree({
+  url,
+  position,
+  rotation,
+  size,
+}: {
+  url: string;
+  position: Position3D;
+  rotation: number;
+  size: number;
+}) {
+  const model = useKitModel(url, size);
   return (
-    <group>
-      <instancedMesh
-        ref={trunks}
-        args={[geometry.trunk, undefined, transforms.length]}
-        castShadow
-        receiveShadow
-      >
-        <meshStandardMaterial color={kind === "palm" ? "#79684f" : "#5b4939"} roughness={1} />
-      </instancedMesh>
-      <instancedMesh
-        ref={leaves}
-        args={[geometry.leaves, foliage, transforms.length]}
-        castShadow={quality === "high"}
-      />
-    </group>
+    <Clone
+      object={model.scene}
+      position={[position[0], position[1] + model.dy, position[2]]}
+      rotation={[0, rotation, 0]}
+      scale={model.scale}
+      castShadow
+      receiveShadow
+    />
   );
 }
 
 function UrbanForest({ city }: { city: CityModel }) {
-  const families = useMemo(() => {
-    const output: Record<TreeKind, InstanceTransform[]> = { jacaranda: [], ficus: [], palm: [] };
+  const trees = useMemo(() => {
+    const spots: { position: Position3D; rotation: number; size: number }[] = [];
+    const clearOfCity = (x: number, z: number) =>
+      city.buildings.every((b) => Math.hypot(x - b.position[0], z - b.position[2]) > 2) &&
+      city.roads.every((road) => distanceToRoad(x, z, road) > road.width / 2 + 0.7);
+
     city.districts.forEach((district, districtIndex) => {
+      // A ring of park trees around each plaza — the one place a planting reads as deliberate.
+      for (let i = 0; i < 6; i += 1) {
+        const angle = (i / 6) * Math.PI * 2 + districtIndex;
+        const radius = 1.7 + seeded(districtIndex * 7 + i, 2) * 0.5;
+        const x = district.plazaPosition[0] + Math.cos(angle) * radius;
+        const z = district.plazaPosition[1] + Math.sin(angle) * radius;
+        if (clearOfCity(x, z))
+          spots.push({
+            position: [x, 0.02, z],
+            rotation: seeded(districtIndex * 13 + i, 5) * Math.PI * 2,
+            size: 1.5 + seeded(districtIndex * 3 + i, 9) * 0.5,
+          });
+      }
+      // A few along the district's front edge, evenly spaced, like a street planting.
       const [cx, cz] = district.position;
       const [w, d] = district.size;
-      const candidates = Array.from(
-        { length: Math.max(5, Math.min(12, Math.floor((w + d) / 3))) },
-        (_, index) => {
-          const edge = index % 4;
-          const along = -0.4 + seeded(districtIndex * 31 + index) * 0.8;
-          const x = edge < 2 ? cx + (edge === 0 ? -w * 0.44 : w * 0.44) : cx + along * w;
-          const z = edge >= 2 ? cz + (edge === 2 ? -d * 0.44 : d * 0.44) : cz + along * d;
-          return [x, 0.12, z] as Position3D;
-        },
-      );
-      const plaza = Array.from({ length: 4 }, (_, index) => {
-        const angle = index * (Math.PI / 2) + 0.55;
-        return [
-          district.plazaPosition[0] + Math.cos(angle) * 1.78,
-          0.12,
-          district.plazaPosition[1] + Math.sin(angle) * 1.78,
-        ] as Position3D;
-      });
-      [...candidates, ...plaza]
-        .filter(([x, , z]) => city.roads.every((road) => distanceToRoad(x, z, road) > road.width / 2 + 0.52))
-        .forEach((position, index) => {
-          const kind: TreeKind =
-            index % 9 === 0 ? "palm" : (index + districtIndex) % 3 === 0 ? "jacaranda" : "ficus";
-          const scale = kind === "palm" ? 0.88 : 0.72 + seeded(index + districtIndex * 19, 4) * 0.34;
-          output[kind].push({
-            position,
-            scale: [scale, scale, scale],
-            rotation: [0, seeded(index + districtIndex * 23, 8) * Math.PI * 2, 0],
+      for (let i = 0; i < 4; i += 1) {
+        const along = (i / 3 - 0.5) * w * 0.82;
+        const x = cx + along;
+        const z = cz + d * 0.46;
+        if (clearOfCity(x, z))
+          spots.push({
+            position: [x, 0.02, z],
+            rotation: seeded(districtIndex * 17 + i, 6) * Math.PI * 2,
+            size: 1.5 + seeded(districtIndex * 5 + i, 4) * 0.45,
           });
-        });
+      }
     });
-    return output;
-  }, [city.districts, city.roads]);
+    return spots.slice(0, 64);
+  }, [city.buildings, city.districts, city.roads]);
+
   return (
     <group>
-      <TreeFamily kind="ficus" transforms={families.ficus} />
-      <TreeFamily kind="jacaranda" transforms={families.jacaranda} />
-      <TreeFamily kind="palm" transforms={families.palm} />
+      {trees.map((tree, index) => (
+        <KitTree
+          key={index}
+          url={TREE_MODEL}
+          position={tree.position}
+          rotation={tree.rotation}
+          size={tree.size}
+        />
+      ))}
     </group>
   );
 }
@@ -488,7 +285,10 @@ function VehicleFleet({ kind, units }: { kind: VehicleKind; units: TrafficUnit[]
     lastUpdate.current = clock.elapsedTime;
     units.forEach((unit, index) => {
       const raw = (clock.elapsedTime * unit.speed + unit.offset) % 1;
-      const progress = unit.lane > 0 ? raw : 1 - raw;
+      // Ride the middle 84% of the segment so cars never sit on the intersection nodes,
+      // which is what read as a pile-up where roads meet.
+      const eased = 0.08 + raw * 0.84;
+      const progress = unit.lane > 0 ? eased : 1 - eased;
       const dx = unit.road.to[0] - unit.road.from[0];
       const dz = unit.road.to[1] - unit.road.from[1];
       const laneOffset = unit.lane * unit.road.width * 0.24;
@@ -529,6 +329,73 @@ function VehicleFleet({ kind, units }: { kind: VehicleKind; units: TrafficUnit[]
   );
 }
 
+const VEHICLE_MODELS: Record<Exclude<VehicleKind, "bus">, string> = {
+  sedan: "/assets/city/vehicles/sedan.glb",
+  suv: "/assets/city/vehicles/suv.glb",
+  taxi: "/assets/city/vehicles/taxi.glb",
+  van: "/assets/city/vehicles/van.glb",
+};
+
+/**
+ * Normalisation for one car model: how to scale/lift/rotate its cloned scene so it sits on
+ * the road as a real ~1.5-unit car facing +Z. Computed once per model.
+ */
+function useCarNormalisation(url: string) {
+  const gltf = useGLTF(url, false, true);
+  return useMemo(() => {
+    gltf.scene.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(gltf.scene);
+    const size = box.getSize(new Vector3());
+    const center = box.getCenter(new Vector3());
+    const modelLength = Math.max(size.x, size.z) || 1;
+    return {
+      scale: 1.5 / modelLength,
+      dy: -box.min.y * (1.5 / modelLength),
+      dx: -center.x * (1.5 / modelLength),
+      dz: -center.z * (1.5 / modelLength),
+      swap: size.x > size.z,
+    };
+  }, [gltf]);
+}
+
+/**
+ * A single authored CC0 car cloned onto the map and animated along its road. Rendered with
+ * drei's <Clone> — the same proven path Explore uses — instead of instancing, because
+ * instancing these GLBs corrupted the frame. Traffic is capped so the draw-call cost stays
+ * modest even at map scale.
+ */
+function MovingCar({ url, unit }: { url: string; unit: TrafficUnit }) {
+  const gltf = useGLTF(url, false, true);
+  const norm = useCarNormalisation(url);
+  const group = useRef<Group>(null);
+  useFrame(({ clock }) => {
+    if (!group.current) return;
+    const raw = (clock.elapsedTime * unit.speed + unit.offset) % 1;
+    const eased = 0.08 + raw * 0.84;
+    const progress = unit.lane > 0 ? eased : 1 - eased;
+    const dx = unit.road.to[0] - unit.road.from[0];
+    const dz = unit.road.to[1] - unit.road.from[1];
+    const laneOffset = unit.lane * unit.road.width * 0.24;
+    group.current.position.set(
+      unit.road.from[0] + dx * progress + unit.nx * laneOffset,
+      unit.road.kind === "bridge" ? 0.6 : 0.03,
+      unit.road.from[1] + dz * progress + unit.nz * laneOffset,
+    );
+    group.current.rotation.y = Math.atan2(dx * unit.lane, dz * unit.lane) + (norm.swap ? Math.PI / 2 : 0);
+  });
+  return (
+    <group ref={group} scale={unit.scale[0]}>
+      <Clone
+        object={gltf.scene}
+        position={[norm.dx, norm.dy, norm.dz]}
+        scale={norm.scale}
+        castShadow
+        receiveShadow
+      />
+    </group>
+  );
+}
+
 function DataTraffic({ city }: { city: CityModel }) {
   const fleets = useMemo(() => {
     const output: Record<VehicleKind, TrafficUnit[]> = {
@@ -539,57 +406,73 @@ function DataTraffic({ city }: { city: CityModel }) {
       bus: [],
     };
     const palette = ["#23323b", "#8b3f36", "#d7d0bd", "#3d5650", "#2b2d31", "#b5a16d"];
-    city.roads
-      .flatMap((road, roadIndex) => {
-        const count = Math.min(5, Math.max(2, Math.round(road.strength / 1.7)));
+
+    // Only real streets and avenues carry cars, longest first, so traffic spreads across the
+    // whole city instead of piling onto whichever segments happened to come first.
+    const drivable = city.roads
+      .filter((road) => road.kind !== "bridge" || true)
+      .map((road, roadIndex) => {
         const dx = road.to[0] - road.from[0];
         const dz = road.to[1] - road.from[1];
-        const length = Math.max(0.001, Math.hypot(dx, dz));
-        return Array.from({ length: count }, (_, index) => ({
-          road,
-          roadIndex,
-          index,
-          dx,
-          dz,
-          length,
-          count,
-        }));
+        return { road, roadIndex, dx, dz, length: Math.hypot(dx, dz) };
       })
-      .slice(0, 32)
-      .forEach(({ road, roadIndex, index, dx, dz, length, count }, fleetIndex) => {
-        const kind: VehicleKind =
-          fleetIndex % 17 === 0
-            ? "bus"
-            : fleetIndex % 11 === 0
-              ? "van"
-              : fleetIndex % 7 === 0
-                ? "taxi"
-                : fleetIndex % 3 === 0
-                  ? "suv"
-                  : "sedan";
-        output[kind].push({
-          road,
-          nx: -dz / length,
-          nz: dx / length,
-          lane: index % 2 === 0 ? 1 : -1,
-          offset: index / Math.max(1, count) + seeded(roadIndex * 17 + index, 4) * 0.15,
-          speed: 0.028 + seeded(roadIndex * 53 + index, 8) * 0.045,
-          color: new Color(kind === "taxi" ? "#d6a91c" : palette[fleetIndex % palette.length]),
-          scale:
-            kind === "bus"
-              ? [1.18, 1.6, 1.64]
-              : kind === "van"
-                ? [1.1, 1.24, 1.2]
-                : kind === "suv"
-                  ? [1.08, 1.14, 1.06]
-                  : [1, 1, 1],
-        });
-      });
+      .filter((entry) => entry.length > 3)
+      .sort((a, b) => b.length - a.length)
+      .slice(0, 40);
+
+    let placed = 0;
+    for (const { road, roadIndex, dx, dz, length } of drivable) {
+      if (placed >= 120) break;
+      // One car per ~7 units of lane, split across two directions.
+      const perLane = Math.max(1, Math.min(3, Math.round(length / 7)));
+      // Every car on a road shares one speed, so even spacing stays even forever — the
+      // per-car random speed was letting cars catch up and overlap.
+      const speed = (0.05 + seeded(roadIndex, 5) * 0.03) / Math.max(6, length);
+      const kind: VehicleKind =
+        roadIndex % 19 === 0
+          ? "bus"
+          : roadIndex % 9 === 0
+            ? "van"
+            : roadIndex % 5 === 0
+              ? "taxi"
+              : roadIndex % 2 === 0
+                ? "suv"
+                : "sedan";
+      for (const lane of [1, -1]) {
+        for (let slot = 0; slot < perLane; slot += 1) {
+          if (placed >= 120) break;
+          const unitKind = lane < 0 && slot === 0 && kind !== "bus" ? "sedan" : kind;
+          output[unitKind].push({
+            road,
+            nx: -dz / length,
+            nz: dx / length,
+            lane,
+            // Evenly phased within the lane, offset half a slot between the two directions.
+            offset: (slot + (lane < 0 ? 0.5 : 0)) / perLane,
+            speed,
+            color: new Color(unitKind === "taxi" ? "#d6a91c" : palette[(roadIndex + slot) % palette.length]),
+            scale: (() => {
+              const jitter = 0.94 + seeded(roadIndex * 29 + slot, 6) * 0.12;
+              return [jitter, jitter, jitter] as Position3D;
+            })(),
+          });
+          placed += 1;
+        }
+      }
+    }
     return output;
   }, [city.roads]);
+  // Cloned GLB cars are pricier than instances, so the moving map fleet is capped; the bus
+  // (no GLB) still rides as the procedural mesh.
+  const glbUnits = (["sedan", "suv", "taxi", "van"] as const)
+    .flatMap((kind) => fleets[kind].map((unit) => ({ kind, unit })))
+    .slice(0, 26);
   return (
     <group>
-      <VehicleFleet kind="sedan" units={Object.values(fleets).flat()} />
+      {glbUnits.map(({ kind, unit }, index) => (
+        <MovingCar key={`${kind}:${index}`} url={VEHICLE_MODELS[kind]} unit={unit} />
+      ))}
+      {fleets.bus.length ? <VehicleFleet kind="bus" units={fleets.bus} /> : null}
     </group>
   );
 }
@@ -652,6 +535,7 @@ function HeroVehicles({ city }: { city: CityModel }) {
 }
 
 HERO_VEHICLES.forEach((url) => useGLTF.preload(url, false, true));
+useGLTF.preload(TREE_MODEL);
 
 function StreetFurniture({ city }: { city: CityModel }) {
   const posts = useRef<InstancedMesh>(null);
@@ -871,7 +755,6 @@ export function CityInfrastructure({ city }: { city: CityModel }) {
   return (
     <group>
       <UrbanForest city={city} />
-      <NeighborhoodFabric city={city} />
       <StreetFurniture city={city} />
       <DataTraffic city={city} />
       {viewMode === "explore" && <HeroVehicles city={city} />}

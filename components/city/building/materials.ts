@@ -159,14 +159,14 @@ function facadeMaterial(building: CityBuilding, colorHex: string, override: stri
     color: new Color(colorHex),
     map: facadeMap(profile.facade, "albedo", bays, building.floors),
     bumpMap: facadeMap(profile.facade, "height", bays, building.floors),
-    bumpScale: 0.075,
+    bumpScale: 0.14,
     // Roughness and metalness come from the packed map, so the material keeps both factors
     // at 1 and lets the texture decide: matte concrete on the wall, near-mirror on the glass.
     roughnessMap: surface,
     metalnessMap: surface,
     roughness: 1,
     metalness: 1,
-    envMapIntensity: 1.45,
+    envMapIntensity: 1.9,
     emissive: override ? new Color(override) : new Color("#ffffff"),
     emissiveMap: override ? null : facadeMap(profile.facade, "emissive", bays, building.floors),
     // Over 1 so the lit panes clear the bloom threshold and actually glow.
@@ -227,9 +227,16 @@ export function buildingMaterials(
 ): BuildingMaterials {
   const color = override ? new Color(override) : analyticalColor(building, layer);
   if (active) color.lerp(new Color("#ffffff"), 0.14);
+  // Curtain-wall glass carries its own tint in the albedo, so on the plain structure view
+  // it must not be multiplied by the archetype's masonry colour (which turned glass red or
+  // brown). Analytical layers still recolour it so risk/activity/ownership keep working.
+  const facadeColor =
+    profileFor(building).facade === "curtain" && layer === "structure" && !override
+      ? new Color(active ? "#f2f6f8" : "#ffffff")
+      : color;
   return {
     ...surfaceSet(building.tone, night),
-    facade: facadeMaterial(building, `#${color.getHexString()}`, override, night),
+    facade: facadeMaterial(building, `#${facadeColor.getHexString()}`, override, night),
     overview: overviewMaterial(building, `#${color.getHexString()}`, night),
   };
 }
