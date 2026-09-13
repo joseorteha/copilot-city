@@ -184,7 +184,7 @@ export function RoadNetwork({ roads }: { roads: CityRoad[] }) {
 
   return (
     <group ref={group}>
-      <mesh geometry={geometries[0]} receiveShadow>
+      <mesh name="roads:pavement" geometry={geometries[0]} receiveShadow>
         <meshStandardMaterial
           color={night ? "#11181d" : "#465351"}
           map={roadTexture("albedo")}
@@ -196,10 +196,10 @@ export function RoadNetwork({ roads }: { roads: CityRoad[] }) {
           envMapIntensity={night ? 2.6 : 0.9}
         />
       </mesh>
-      <mesh geometry={geometries[1]} receiveShadow>
+      <mesh name="roads:kerbs" geometry={geometries[1]} receiveShadow>
         <meshStandardMaterial color="#d4d1c3" roughness={0.86} metalness={0.06} />
       </mesh>
-      <mesh geometry={geometries[2]}>
+      <mesh name="roads:markings" geometry={geometries[2]}>
         <meshStandardMaterial
           color="#f0d890"
           roughness={0.5}
@@ -207,13 +207,13 @@ export function RoadNetwork({ roads }: { roads: CityRoad[] }) {
           emissiveIntensity={night ? 0.55 : 0}
         />
       </mesh>
-      <mesh geometry={geometries[3]} castShadow receiveShadow>
+      <mesh name="roads:bridges" geometry={geometries[3]} castShadow receiveShadow>
         <meshStandardMaterial color="#9d9a8c" roughness={0.92} />
       </mesh>
-      <mesh geometry={geometries[4]} receiveShadow>
+      <mesh name="roads:medians" geometry={geometries[4]} receiveShadow>
         <meshStandardMaterial color={night ? "#29463b" : "#5f7f62"} roughness={0.96} />
       </mesh>
-      <mesh geometry={geometries[5]}>
+      <mesh name="roads:details" geometry={geometries[5]}>
         <meshStandardMaterial color="#20292a" roughness={0.5} metalness={0.62} />
       </mesh>
     </group>
