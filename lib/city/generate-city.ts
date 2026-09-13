@@ -114,20 +114,74 @@ function createBuildings(plans: DistrictPlan[], analysis: RepositoryAnalysis, in
   );
   const buildings: CityBuilding[] = [];
 
+  const neighborhoodFor = (file: RepositoryFile, districtId: string) => {
+    const parts = file.path.split("/").filter(Boolean);
+    const districtIndex = parts.lastIndexOf(districtId);
+    const candidate = parts[districtIndex + 1];
+    if (!candidate || candidate.includes(".")) return { id: districtId, name: "Centro" };
+    return { id: `${districtId}/${candidate}`, name: titleCase(candidate) };
+  };
+
   plans.forEach((plan) => {
-    const sortedFiles = [...plan.files].sort((a, b) => {
-      const scoreDifference = (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0);
-      return scoreDifference || a.path.localeCompare(b.path);
-    });
-    const lots = lotPositions(plan).filter(
+    const freeLots = lotPositions(plan).filter(
       ([x, z]) => x !== plan.plazaPosition[0] || z !== plan.plazaPosition[1],
     );
-    lots.sort(
-      (a, b) =>
-        Math.hypot(a[0] - plan.plazaPosition[0], a[1] - plan.plazaPosition[1]) -
-        Math.hypot(b[0] - plan.plazaPosition[0], b[1] - plan.plazaPosition[1]),
-    );
-    sortedFiles.forEach((file, index) => {
+    const groups = new Map<string, { name: string; files: RepositoryFile[] }>();
+    for (const file of plan.files) {
+      const neighborhood = neighborhoodFor(file, plan.id);
+      const group = groups.get(neighborhood.id) ?? { name: neighborhood.name, files: [] };
+      group.files.push(file);
+      groups.set(neighborhood.id, group);
+    }
+    const neighborhoods = [...groups.entries()]
+      .map(([id, group]) => ({
+        id,
+        name: group.name,
+        files: group.files.sort(
+          (a, b) => (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0) || a.path.localeCompare(b.path),
+        ),
+        importance: Math.max(...group.files.map((file) => scores.get(file.id) ?? 0)),
+      }))
+      .sort((a, b) => b.importance - a.importance || a.id.localeCompare(b.id));
+
+    const placements: Array<{
+      file: RepositoryFile;
+      lot: [number, number];
+      neighborhood: { id: string; name: string };
+    }> = [];
+    for (const neighborhood of neighborhoods) {
+      const seed = [...freeLots].sort(
+        (a, b) =>
+          Math.hypot(a[0] - plan.plazaPosition[0], a[1] - plan.plazaPosition[1]) -
+            Math.hypot(b[0] - plan.plazaPosition[0], b[1] - plan.plazaPosition[1]) ||
+          a[1] - b[1] ||
+          a[0] - b[0],
+      )[0];
+      if (!seed) continue;
+      const neighborhoodLots = [...freeLots]
+        .sort(
+          (a, b) =>
+            Math.hypot(a[0] - seed[0], a[1] - seed[1]) - Math.hypot(b[0] - seed[0], b[1] - seed[1]) ||
+            Math.hypot(a[0] - plan.plazaPosition[0], a[1] - plan.plazaPosition[1]) -
+              Math.hypot(b[0] - plan.plazaPosition[0], b[1] - plan.plazaPosition[1]),
+        )
+        .slice(0, neighborhood.files.length)
+        .sort(
+          (a, b) =>
+            Math.hypot(a[0] - plan.plazaPosition[0], a[1] - plan.plazaPosition[1]) -
+            Math.hypot(b[0] - plan.plazaPosition[0], b[1] - plan.plazaPosition[1]),
+        );
+      neighborhood.files.forEach((file, index) => {
+        const lot = neighborhoodLots[index];
+        if (lot) placements.push({ file, lot, neighborhood });
+      });
+      for (const lot of neighborhoodLots) {
+        const index = freeLots.indexOf(lot);
+        if (index >= 0) freeLots.splice(index, 1);
+      }
+    }
+
+    placements.forEach(({ file, lot, neighborhood }) => {
       const hash = hashString(file.path);
       const importance = scores.get(file.id) ?? 0;
       const isLandmark = landmarkIds.has(file.id);
@@ -141,10 +195,6 @@ function createBuildings(plans: DistrictPlan[], analysis: RepositoryAnalysis, in
         : isLandmark
           ? 9 + Math.round(importance * 4)
           : Math.max(2, Math.min(10, 2 + Math.round(importance * 7)));
-      const lot = lots[index];
-      // Row count guarantees a spare lot today, but that invariant lives in layout.ts; a
-      // missing lot should drop one building, not throw inside the API route.
-      if (!lot) return;
       const [x, z] = lot;
       const fileChanges = insights.commits
         .flatMap((commit) => commit.files.map((change) => ({ commit, change })))
@@ -166,6 +216,8 @@ function createBuildings(plans: DistrictPlan[], analysis: RepositoryAnalysis, in
         name: file.name,
         path: file.path,
         districtId: plan.id,
+        neighborhoodId: neighborhood.id,
+        neighborhoodName: neighborhood.name,
         position: [x, 0.08, z],
         // Half the lots turn their entrance to the opposite street, plus a few degrees of
         // deterministic jitter: enough to break the grid without overlapping a neighbour.
