@@ -30,6 +30,7 @@ import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { CityErrorBoundary } from "@/components/city/CityErrorBoundary";
+import { DragHandle, useDraggable } from "@/components/ui/draggable";
 import { CityIntelligence } from "@/components/panels/CityIntelligence";
 import { ARCHETYPE_LABELS } from "@/lib/city/buildings";
 import { useCityStore } from "@/store/city-store";
@@ -119,6 +120,8 @@ export function CityExperience() {
   const [intelligenceTab, setIntelligenceTab] = useState<"layers" | "git">("layers");
   const [query, setQuery] = useState("");
   const [hintDismissed, setHintDismissed] = useState(false);
+  const inspectorDrag = useDraggable();
+  const searchDrag = useDraggable();
   const [exportState, setExportState] = useState<{
     status: "idle" | "loading" | "done" | "error";
     message: string;
@@ -608,7 +611,8 @@ export function CityExperience() {
           )}
 
           {searchOpen && (
-            <section className="search-panel glass-panel">
+            <section className="search-panel glass-panel" style={searchDrag.style}>
+              <DragHandle handle={searchDrag.handle} label="Búsqueda" dragging={searchDrag.dragging} />
               <div className="search-heading">
                 <Search size={15} />
                 <input
@@ -643,7 +647,8 @@ export function CityExperience() {
           )}
 
           {selectedBuilding && (
-            <aside className="inspector glass-panel">
+            <aside className="inspector glass-panel" style={inspectorDrag.style}>
+              <DragHandle handle={inspectorDrag.handle} label="Inspector" dragging={inspectorDrag.dragging} />
               <button
                 className="close-button"
                 onClick={() => selectBuilding(null)}
