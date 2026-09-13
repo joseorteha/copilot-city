@@ -1,4 +1,11 @@
-import type { CommitInsight, ContributorInsight, PullRequestInsight, RepositoryInsights, RepositoryMetadata } from "@/types/repository";
+import type {
+  CommitInsight,
+  ContributorInsight,
+  InsightsDegradation,
+  PullRequestInsight,
+  RepositoryInsights,
+  RepositoryMetadata,
+} from "@/types/repository";
 
 interface GitHubRepositoryResponse {
   name: string;
@@ -38,7 +45,14 @@ interface GitHubCommitListItem {
 }
 
 interface GitHubCommitDetail extends GitHubCommitListItem {
-  files?: Array<{ filename: string; status: string; additions: number; deletions: number; changes: number; previous_filename?: string }>;
+  files?: Array<{
+    filename: string;
+    status: string;
+    additions: number;
+    deletions: number;
+    changes: number;
+    previous_filename?: string;
+  }>;
 }
 
 interface GitHubPullRequest {
@@ -53,8 +67,21 @@ interface GitHubPullRequest {
   user: { login: string } | null;
 }
 
-interface GitHubContributor { login: string; avatar_url: string; html_url: string; contributions: number }
-interface GitHubWorkflowRuns { workflow_runs: Array<{ status: string; conclusion: string | null; name: string; html_url: string; updated_at: string }> }
+interface GitHubContributor {
+  login: string;
+  avatar_url: string;
+  html_url: string;
+  contributions: number;
+}
+interface GitHubWorkflowRuns {
+  workflow_runs: Array<{
+    status: string;
+    conclusion: string | null;
+    name: string;
+    html_url: string;
+    updated_at: string;
+  }>;
+}
 
 export class GitHubApiError extends Error {
   constructor(
@@ -145,10 +172,7 @@ export async function getRepositoryTree(metadata: RepositoryMetadata) {
   );
 }
 
-export async function getRawFile(
-  metadata: RepositoryMetadata,
-  path: string,
-): Promise<string | null> {
+export async function getRawFile(metadata: RepositoryMetadata, path: string): Promise<string | null> {
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   const branch = encodeURIComponent(metadata.defaultBranch);
   const url = `https://raw.githubusercontent.com/${encodeURIComponent(metadata.owner)}/${encodeURIComponent(metadata.name)}/${branch}/${encodedPath}`;
@@ -177,30 +201,61 @@ function coordinates(metadata: RepositoryMetadata) {
 }
 
 function normalizeStatus(status: string) {
-  return (["added", "modified", "removed", "renamed"].includes(status) ? status : "unknown") as "added" | "modified" | "removed" | "renamed" | "unknown";
+  return (["added", "modified", "removed", "renamed"].includes(status) ? status : "unknown") as
+    "added" | "modified" | "removed" | "renamed" | "unknown";
 }
 
 export async function getRepositoryInsights(metadata: RepositoryMetadata): Promise<RepositoryInsights> {
   const repo = coordinates(metadata);
-  const empty: RepositoryInsights = { commits: [], pullRequests: [], contributors: [], ci: null };
+  const empty: RepositoryInsights = {
+    commits: [],
+    pullRequests: [],
+    contributors: [],
+    ci: null,
+    degraded: null,
+  };
   const commitDepth = process.env.GITHUB_TOKEN ? 8 : 4;
   const pullDepth = process.env.GITHUB_TOKEN ? 3 : 1;
 
   try {
     const [commitList, pullList, contributors, workflowRuns] = await Promise.all([
-      fetchGitHubJson<GitHubCommitListItem[]>(`https://api.github.com/repos/${repo}/commits?per_page=${commitDepth}`),
-      fetchGitHubJson<GitHubPullRequest[]>(`https://api.github.com/repos/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=${pullDepth}`),
-      fetchGitHubJson<GitHubContributor[]>(`https://api.github.com/repos/${repo}/contributors?per_page=8&anon=1`),
-      fetchGitHubJson<GitHubWorkflowRuns>(`https://api.github.com/repos/${repo}/actions/runs?per_page=1`).catch(() => ({ workflow_runs: [] })),
+      fetchGitHubJson<GitHubCommitListItem[]>(
+        `https://api.github.com/repos/${repo}/commits?per_page=${commitDepth}`,
+      ),
+      fetchGitHubJson<GitHubPullRequest[]>(
+        `https://api.github.com/repos/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=${pullDepth}`,
+      ),
+      fetchGitHubJson<GitHubContributor[]>(
+        `https://api.github.com/repos/${repo}/contributors?per_page=8&anon=1`,
+      ),
+      fetchGitHubJson<GitHubWorkflowRuns>(
+        `https://api.github.com/repos/${repo}/actions/runs?per_page=1`,
+      ).catch(() => ({ workflow_runs: [] })),
     ]);
 
     const [commitDetails, pullFiles] = await Promise.all([
-      Promise.all(commitList.slice(0, commitDepth).map((commit) => fetchGitHubJson<GitHubCommitDetail>(`https://api.github.com/repos/${repo}/commits/${commit.sha}`).catch(() => commit))),
-      Promise.all(pullList.slice(0, pullDepth).map((pull) => fetchGitHubJson<GitHubCommitDetail["files"]>(`https://api.github.com/repos/${repo}/pulls/${pull.number}/files?per_page=100`).catch(() => []))),
+      Promise.all(
+        commitList
+          .slice(0, commitDepth)
+          .map((commit) =>
+            fetchGitHubJson<GitHubCommitDetail>(
+              `https://api.github.com/repos/${repo}/commits/${commit.sha}`,
+            ).catch(() => commit),
+          ),
+      ),
+      Promise.all(
+        pullList
+          .slice(0, pullDepth)
+          .map((pull) =>
+            fetchGitHubJson<GitHubCommitDetail["files"]>(
+              `https://api.github.com/repos/${repo}/pulls/${pull.number}/files?per_page=100`,
+            ).catch(() => []),
+          ),
+      ),
     ]);
 
     const commits: CommitInsight[] = commitDetails.map((commit) => {
-      const files = "files" in commit ? commit.files ?? [] : [];
+      const files = "files" in commit ? (commit.files ?? []) : [];
       return {
         sha: commit.sha,
         message: commit.commit.message.split("\n")[0],
@@ -208,7 +263,13 @@ export async function getRepositoryInsights(metadata: RepositoryMetadata): Promi
         avatarUrl: commit.author?.avatar_url ?? null,
         date: commit.commit.author?.date ?? new Date(0).toISOString(),
         htmlUrl: commit.html_url,
-        files: files.map((file) => ({ path: file.filename, status: normalizeStatus(file.status), additions: file.additions, deletions: file.deletions, changes: file.changes })),
+        files: files.map((file) => ({
+          path: file.filename,
+          status: normalizeStatus(file.status),
+          additions: file.additions,
+          deletions: file.deletions,
+          changes: file.changes,
+        })),
       };
     });
 
@@ -222,14 +283,39 @@ export async function getRepositoryInsights(metadata: RepositoryMetadata): Promi
       additions: pull.additions,
       deletions: pull.deletions,
       changedFiles: pull.changed_files,
-      files: (pullFiles[index] ?? []).map((file) => ({ path: file.filename, status: normalizeStatus(file.status), additions: file.additions, deletions: file.deletions, changes: file.changes })),
+      files: (pullFiles[index] ?? []).map((file) => ({
+        path: file.filename,
+        status: normalizeStatus(file.status),
+        additions: file.additions,
+        deletions: file.deletions,
+        changes: file.changes,
+      })),
     }));
 
-    const normalizedContributors: ContributorInsight[] = contributors.filter((item) => item?.login).map((item) => ({ login: item.login, avatarUrl: item.avatar_url, htmlUrl: item.html_url, contributions: item.contributions }));
+    const normalizedContributors: ContributorInsight[] = contributors
+      .filter((item) => item?.login)
+      .map((item) => ({
+        login: item.login,
+        avatarUrl: item.avatar_url,
+        htmlUrl: item.html_url,
+        contributions: item.contributions,
+      }));
     const run = workflowRuns.workflow_runs[0];
-    const ci = run ? { status: run.status, conclusion: run.conclusion, name: run.name, htmlUrl: run.html_url, updatedAt: run.updated_at } : null;
-    return { commits, pullRequests, contributors: normalizedContributors, ci };
-  } catch {
-    return empty;
+    const ci = run
+      ? {
+          status: run.status,
+          conclusion: run.conclusion,
+          name: run.name,
+          htmlUrl: run.html_url,
+          updatedAt: run.updated_at,
+        }
+      : null;
+    return { commits, pullRequests, contributors: normalizedContributors, ci, degraded: null };
+  } catch (error) {
+    const degraded: InsightsDegradation =
+      error instanceof GitHubApiError && (error.status === 403 || error.status === 429)
+        ? "rate-limit"
+        : "error";
+    return { ...empty, degraded };
   }
 }
