@@ -3,6 +3,8 @@
 
 # Next.js
 /.next/
+/.next-dev-conflict/
+/.next-dev-*/
 /out/
 
 # Production
@@ -18,6 +20,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 visual-server.log
+visual-server-error.log
+/.artifacts/
 
 # OS and editor files
 .DS_Store

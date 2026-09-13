@@ -10,10 +10,7 @@ import {
   getRepositoryTree,
   GitHubApiError,
 } from "@/lib/github/github-client";
-import {
-  parseRepositoryUrl,
-  RepositoryUrlError,
-} from "@/lib/github/parse-repository-url";
+import { parseRepositoryUrl, RepositoryUrlError } from "@/lib/github/parse-repository-url";
 import type { AnalyzeRepositoryResponse } from "@/types/city";
 
 export const runtime = "nodejs";
@@ -38,8 +35,12 @@ export async function POST(request: Request) {
     }
 
     const { owner, repo } = parseRepositoryUrl(payload.data.url);
-    const cacheKey = `${owner.toLowerCase()}/${repo.toLowerCase()}`;
+    // A token-backed response carries a deeper history than an anonymous one, so the two
+    // must never share an entry.
+    const depth = process.env.GITHUB_TOKEN ? "deep" : "shallow";
+    const cacheKey = `${depth}:${owner.toLowerCase()}/${repo.toLowerCase()}`;
     const cached = analysisCache.get(cacheKey);
+    if (cached && cached.expiresAt <= Date.now()) analysisCache.delete(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return NextResponse.json(cached.response, {
         headers: { "Cache-Control": "private, max-age=60", "X-Copilot-City-Cache": "HIT" },

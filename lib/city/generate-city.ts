@@ -1,21 +1,25 @@
 import type {
   BuildingTone,
-  BuildingVariant,
   CityBuilding,
   CityConnection,
   CityDistrict,
   CityModel,
   CityRoad,
   DistrictPurpose,
-  Position2D,
 } from "@/types/city";
+import { graphCentrality, hashString } from "./graph";
+import {
+  arrangeDistricts,
+  DISTRICT_PADDING,
+  lotPositions,
+  SPACING_X,
+  SPACING_Z,
+  type DistrictPlan,
+} from "./layout";
+import { classifyBuilding } from "./buildings";
+import { createRoads, roadRouter } from "./roads";
 import type { RepositoryAnalysis, RepositoryFile, RepositoryInsights } from "@/types/repository";
 
-const DISTRICT_GAP = 7;
-const DISTRICTS_PER_ROW = 3;
-const CELL_WIDTH = 3.7;
-const CELL_DEPTH = 3.9;
-const DISTRICT_MARGIN = 4.2;
 const PURPOSE_STYLE: Record<DistrictPurpose, { color: string; tones: BuildingTone[] }> = {
   frontend: { color: "#7f9699", tones: ["slate", "concrete"] },
   services: { color: "#829487", tones: ["concrete", "stone"] },
@@ -26,28 +30,11 @@ const PURPOSE_STYLE: Record<DistrictPurpose, { color: string; tones: BuildingTon
   general: { color: "#89928a", tones: ["stone", "slate", "concrete"] },
 };
 
-interface DistrictPlan extends CityDistrict {
-  columns: number;
-  rows: number;
-  files: RepositoryFile[];
-}
-
-function hashString(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
 function titleCase(value: string) {
   if (value === "root") return "Raíz";
   if (value === "other") return "Otros";
 
-  return value
-    .replace(/[-_.]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
+  return value.replace(/[-_.]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function districtPurpose(value: string): DistrictPurpose {
@@ -59,14 +46,6 @@ function districtPurpose(value: string): DistrictPurpose {
   if (/component|page|view|ui|web|client|frontend|app/.test(name)) return "frontend";
   if (/script|config|infra|deploy|ci|public|asset|tool/.test(name)) return "infrastructure";
   return "general";
-}
-
-function chunks<T>(values: T[], size: number) {
-  const result: T[][] = [];
-  for (let index = 0; index < values.length; index += size) {
-    result.push(values.slice(index, index + size));
-  }
-  return result;
 }
 
 function createDistrictPlans(analysis: RepositoryAnalysis) {
@@ -82,14 +61,14 @@ function createDistrictPlans(analysis: RepositoryAnalysis) {
     .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
     .map(([district, files]) => {
       const purpose = districtPurpose(district);
-      const columns = Math.max(2, Math.min(6, Math.ceil(Math.sqrt((files.length + 1) * 1.08))));
-      const rows = Math.ceil((files.length + 1) / columns);
+      const columns = files.length > 18 ? 6 : files.length > 5 ? 4 : 2;
+      const rows = Math.ceil((files.length + 2) / columns);
 
       return {
         id: district,
         name: titleCase(district),
         position: [0, 0],
-        size: [columns * CELL_WIDTH + DISTRICT_MARGIN, rows * CELL_DEPTH + DISTRICT_MARGIN],
+        size: [columns * SPACING_X + DISTRICT_PADDING, rows * SPACING_Z + DISTRICT_PADDING],
         color: PURPOSE_STYLE[purpose].color,
         buildingCount: files.length,
         purpose,
@@ -100,25 +79,7 @@ function createDistrictPlans(analysis: RepositoryAnalysis) {
       };
     });
 
-  const planRows = chunks(plans, DISTRICTS_PER_ROW);
-  const rowDepths = planRows.map((row) => Math.max(...row.map((plan) => plan.size[1])));
-  const totalDepth = rowDepths.reduce((sum, depth) => sum + depth, 0) + Math.max(0, planRows.length - 1) * DISTRICT_GAP;
-  let zCursor = -totalDepth / 2;
-
-  planRows.forEach((row, rowIndex) => {
-    const rowWidth = row.reduce((sum, plan) => sum + plan.size[0], 0) + Math.max(0, row.length - 1) * DISTRICT_GAP;
-    const rowDepth = rowDepths[rowIndex];
-    let xCursor = -rowWidth / 2;
-
-    for (const plan of row) {
-      plan.position = [xCursor + plan.size[0] / 2, zCursor + rowDepth / 2];
-      plan.plazaPosition = plan.position;
-      xCursor += plan.size[0] + DISTRICT_GAP;
-    }
-
-    zCursor += rowDepth + DISTRICT_GAP;
-  });
-
+  arrangeDistricts(plans, analysis, graphCentrality(analysis));
   return plans;
 }
 
@@ -140,25 +101,11 @@ function importanceScores(files: RepositoryFile[]) {
   );
 }
 
-function buildingVariant(file: RepositoryFile, importance: number, isLandmark: boolean): BuildingVariant {
-  const path = file.path.toLowerCase();
-  const district = file.district.toLowerCase();
-
-  if (isLandmark) return "landmark";
-  if (/(^|\/)(test|tests|__tests__|spec|specs)(\/|$)/.test(path) || /\.(test|spec)\./.test(path)) return "laboratory";
-  if (file.extension === "md" || district.includes("doc")) return "library";
-  if (/database|schema|migration|storage|cache|\.sql$/.test(path)) return "industrial";
-  if (/(^|\/)(api|server|services?|routes?|controllers?)(\/|$)/.test(path)) return "tower";
-  if (/docker|workflow|\.github|scripts?|config|webpack|vite|eslint|deploy/.test(path)) return "industrial";
-  if (/auth|security|permission|session/.test(path)) return "corner";
-  if (importance > 0.64) return "tower";
-
-  const variants: BuildingVariant[] = ["office", "terrace", "corner"];
-  return variants[hashString(file.path) % variants.length];
-}
-
 function createBuildings(plans: DistrictPlan[], analysis: RepositoryAnalysis, insights: RepositoryInsights) {
   const scores = importanceScores(analysis.files);
+  const centralities = graphCentrality(analysis);
+  for (const file of analysis.files)
+    scores.set(file.id, (scores.get(file.id) ?? 0) * 0.45 + (centralities.get(file.id) ?? 0) * 0.55);
   const landmarkIds = new Set(
     [...analysis.files]
       .sort((a, b) => (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0))
@@ -172,36 +119,45 @@ function createBuildings(plans: DistrictPlan[], analysis: RepositoryAnalysis, in
       const scoreDifference = (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0);
       return scoreDifference || a.path.localeCompare(b.path);
     });
-    const usableWidth = plan.size[0] - DISTRICT_MARGIN;
-    const usableDepth = plan.size[1] - DISTRICT_MARGIN;
-    const cellWidth = usableWidth / plan.columns;
-    const cellDepth = usableDepth / plan.rows;
-
-    const centerSlot = Math.floor(plan.rows / 2) * plan.columns + Math.floor(plan.columns / 2);
-
+    const lots = lotPositions(plan).filter(
+      ([x, z]) => x !== plan.plazaPosition[0] || z !== plan.plazaPosition[1],
+    );
+    lots.sort(
+      (a, b) =>
+        Math.hypot(a[0] - plan.plazaPosition[0], a[1] - plan.plazaPosition[1]) -
+        Math.hypot(b[0] - plan.plazaPosition[0], b[1] - plan.plazaPosition[1]),
+    );
     sortedFiles.forEach((file, index) => {
-      const slot = index >= centerSlot ? index + 1 : index;
-      const column = slot % plan.columns;
-      const row = Math.floor(slot / plan.columns);
       const hash = hashString(file.path);
       const importance = scores.get(file.id) ?? 0;
       const isLandmark = landmarkIds.has(file.id);
-      const width = 1.72 + ((hash & 255) / 255) * 0.72;
-      const depth = 1.78 + (((hash >>> 8) & 255) / 255) * 0.74;
-      const floors = isLandmark
-        ? 9 + Math.round(importance * 4)
-        : Math.max(2, Math.min(10, 2 + Math.round(importance * 7)));
-      const x = plan.position[0] - usableWidth / 2 + cellWidth * (column + 0.5);
-      const z = plan.position[1] - usableDepth / 2 + cellDepth * (row + 0.5);
-      const fileChanges = insights.commits.flatMap((commit) => commit.files.map((change) => ({ commit, change }))).filter(({ change }) => change.path === file.path);
+      const width = (2.75 + ((hash & 255) / 255) * 1.15) * (isLandmark ? 1.22 : 1);
+      const depth = (2.9 + (((hash >>> 8) & 255) / 255) * 1.05) * (isLandmark ? 1.12 : 1);
+      const centrality = centralities.get(file.id) ?? 0;
+      const variant = classifyBuilding(file, centrality, isLandmark);
+      const lowRise = ["data-center", "laboratory", "library", "industrial", "security"].includes(variant);
+      const floors = lowRise
+        ? 2 + (hash % 2)
+        : isLandmark
+          ? 9 + Math.round(importance * 4)
+          : Math.max(2, Math.min(10, 2 + Math.round(importance * 7)));
+      const lot = lots[index];
+      // Row count guarantees a spare lot today, but that invariant lives in layout.ts; a
+      // missing lot should drop one building, not throw inside the API route.
+      if (!lot) return;
+      const [x, z] = lot;
+      const fileChanges = insights.commits
+        .flatMap((commit) => commit.files.map((change) => ({ commit, change })))
+        .filter(({ change }) => change.path === file.path);
       const additions = fileChanges.reduce((sum, item) => sum + item.change.additions, 0);
       const deletions = fileChanges.reduce((sum, item) => sum + item.change.deletions, 0);
       const authorCounts = new Map<string, number>();
-      for (const item of fileChanges) authorCounts.set(item.commit.author, (authorCounts.get(item.commit.author) ?? 0) + 1);
+      for (const item of fileChanges)
+        authorCounts.set(item.commit.author, (authorCounts.get(item.commit.author) ?? 0) + 1);
       const primaryAuthor = [...authorCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
       const recentChanges = fileChanges.length;
-      const changePressure = Math.min(1, recentChanges / Math.max(1, insights.commits.length * .5));
-      const risk = Math.min(1, importance * .44 + (file.complexity / 100) * .28 + changePressure * .28);
+      const changePressure = Math.min(1, recentChanges / Math.max(1, insights.commits.length * 0.5));
+      const risk = Math.min(1, importance * 0.44 + (file.complexity / 100) * 0.28 + changePressure * 0.28);
       const dates = fileChanges.map((item) => item.commit.date).sort();
 
       buildings.push({
@@ -210,15 +166,19 @@ function createBuildings(plans: DistrictPlan[], analysis: RepositoryAnalysis, in
         name: file.name,
         path: file.path,
         districtId: plan.id,
-        position: [x, 0.34, z],
-        rotation: hash % 2 === 0 ? 0 : Math.PI / 2,
-        width: Math.min(width, cellWidth * 0.68),
-        depth: Math.min(depth, cellDepth * 0.68),
-        height: floors * 1.02,
+        position: [x, 0.08, z],
+        // Half the lots turn their entrance to the opposite street, plus a few degrees of
+        // deterministic jitter: enough to break the grid without overlapping a neighbour.
+        rotation: (hash & 1 ? Math.PI : 0) + (((hash >>> 16) & 255) / 255 - 0.5) * 0.09,
+        width,
+        depth,
+        height: floors * 1.08,
         floors,
-        variant: buildingVariant(file, importance, isLandmark),
+        variant,
         tone: PURPOSE_STYLE[plan.purpose].tones[hash % PURPOSE_STYLE[plan.purpose].tones.length],
         importance,
+        centrality,
+        detailSeed: hash,
         isLandmark,
         codePreview: file.codePreview,
         metrics: {
@@ -243,140 +203,42 @@ function createBuildings(plans: DistrictPlan[], analysis: RepositoryAnalysis, in
   return buildings;
 }
 
-function districtBoundaryPoint(from: CityDistrict, to: CityDistrict): Position2D {
-  const deltaX = to.position[0] - from.position[0];
-  const deltaZ = to.position[1] - from.position[1];
-  const length = Math.hypot(deltaX, deltaZ) || 1;
-  const directionX = deltaX / length;
-  const directionZ = deltaZ / length;
-  const xDistance = Math.abs(directionX) < 0.0001 ? Number.POSITIVE_INFINITY : from.size[0] / 2 / Math.abs(directionX);
-  const zDistance = Math.abs(directionZ) < 0.0001 ? Number.POSITIVE_INFINITY : from.size[1] / 2 / Math.abs(directionZ);
-  const distance = Math.min(xDistance, zDistance) + 0.25;
-
-  return [
-    from.position[0] + directionX * distance,
-    from.position[1] + directionZ * distance,
-  ];
-}
-
-function createRoads(plans: DistrictPlan[], analysis: RepositoryAnalysis) {
-  const districtByFile = new Map(analysis.files.map((file) => [file.id, file.district]));
-  const coupling = new Map<string, { districts: [string, string]; strength: number }>();
-
-  for (const edge of analysis.edges) {
-    const sourceDistrict = districtByFile.get(edge.source);
-    const targetDistrict = districtByFile.get(edge.target);
-    if (!sourceDistrict || !targetDistrict || sourceDistrict === targetDistrict) continue;
-
-    const districts: [string, string] = sourceDistrict < targetDistrict
-      ? [sourceDistrict, targetDistrict]
-      : [targetDistrict, sourceDistrict];
-    const key = districts.join("→");
-    const current = coupling.get(key) ?? { districts, strength: 0 };
-    current.strength += 1;
-    coupling.set(key, current);
-  }
-
-  const planById = new Map(plans.map((plan) => [plan.id, plan]));
-  const connectedPairs = new Set<string>();
-  const roads: CityRoad[] = plans.flatMap((plan) => {
-    const halfWidth = plan.size[0] / 2 - 0.35;
-    const halfDepth = plan.size[1] / 2 - 0.35;
-    return [
-      {
-        id: `internal:${plan.id}:east-west`,
-        from: [plan.position[0] - halfWidth, plan.position[1]],
-        to: [plan.position[0] + halfWidth, plan.position[1]],
-        width: 0.62,
-        strength: 0,
-        kind: "street",
-        districts: [plan.id, plan.id],
-      },
-      {
-        id: `internal:${plan.id}:north-south`,
-        from: [plan.position[0], plan.position[1] - halfDepth],
-        to: [plan.position[0], plan.position[1] + halfDepth],
-        width: 0.62,
-        strength: 0,
-        kind: "street",
-        districts: [plan.id, plan.id],
-      },
-    ] satisfies CityRoad[];
-  });
-
-  roads.push(...[...coupling.values()]
-    .sort((a, b) => b.strength - a.strength)
-    .slice(0, 16)
-    .flatMap((connection) => {
-      const from = planById.get(connection.districts[0]);
-      const to = planById.get(connection.districts[1]);
-      if (!from || !to) return [];
-
-      connectedPairs.add(connection.districts.join("→"));
-      return [{
-        id: `dependency:${connection.districts.join(":")}`,
-        from: districtBoundaryPoint(from, to),
-        to: districtBoundaryPoint(to, from),
-        width: Math.min(2.5, 0.9 + Math.log2(connection.strength + 1) * 0.42),
-        strength: connection.strength,
-        kind: connection.strength >= 5 ? "avenue" : "bridge",
-        districts: connection.districts,
-      } satisfies CityRoad];
-    }));
-
-  for (let index = 1; index < plans.length; index += 1) {
-    const current = plans[index];
-    const nearest = plans
-      .slice(0, index)
-      .map((candidate) => ({
-        candidate,
-        distance: Math.hypot(
-          candidate.position[0] - current.position[0],
-          candidate.position[1] - current.position[1],
-        ),
-      }))
-      .sort((a, b) => a.distance - b.distance)[0]?.candidate;
-
-    if (!nearest) continue;
-    const pair: [string, string] = nearest.id < current.id ? [nearest.id, current.id] : [current.id, nearest.id];
-    if (connectedPairs.has(pair.join("→"))) continue;
-
-    roads.push({
-      id: `structure:${pair.join(":")}`,
-      from: districtBoundaryPoint(nearest, current),
-      to: districtBoundaryPoint(current, nearest),
-      width: 0.85,
-      strength: 0,
-      kind: "street",
-      districts: pair,
-    });
-  }
-
-  return roads;
-}
-
-function createConnections(buildings: CityBuilding[], analysis: RepositoryAnalysis): CityConnection[] {
+function createConnections(
+  buildings: CityBuilding[],
+  analysis: RepositoryAnalysis,
+  roads: CityRoad[],
+): CityConnection[] {
+  const route = roadRouter(roads);
   const buildingByNode = new Map(buildings.map((building) => [building.nodeId, building]));
   return analysis.edges.flatMap((edge, index) => {
     const source = buildingByNode.get(edge.source);
     const target = buildingByNode.get(edge.target);
     if (!source || !target) return [];
-    return [{
-      id: `connection:${index}:${edge.source}:${edge.target}`,
-      sourceBuildingId: source.id,
-      targetBuildingId: target.id,
-      source: [source.position[0], source.position[2]],
-      target: [target.position[0], target.position[2]],
-      specifier: edge.specifier,
-      type: edge.type,
-      crossDistrict: source.districtId !== target.districtId,
-    } satisfies CityConnection];
+    return [
+      {
+        id: `connection:${index}:${edge.source}:${edge.target}`,
+        sourceBuildingId: source.id,
+        targetBuildingId: target.id,
+        source: [source.position[0], source.position[2]],
+        target: [target.position[0], target.position[2]],
+        specifier: edge.specifier,
+        type: edge.type,
+        crossDistrict: source.districtId !== target.districtId,
+        route: route(
+          [source.position[0], source.position[2]],
+          [target.position[0], target.position[2]],
+          source.districtId,
+          target.districtId,
+        ),
+      } satisfies CityConnection,
+    ];
   });
 }
 
 function findCycles(analysis: RepositoryAnalysis) {
   const adjacency = new Map<string, string[]>();
-  for (const edge of analysis.edges) adjacency.set(edge.source, [...(adjacency.get(edge.source) ?? []), edge.target]);
+  for (const edge of analysis.edges)
+    adjacency.set(edge.source, [...(adjacency.get(edge.source) ?? []), edge.target]);
   const indexByNode = new Map<string, number>();
   const lowLink = new Map<string, number>();
   const stack: string[] = [];
@@ -415,7 +277,16 @@ function findCycles(analysis: RepositoryAnalysis) {
   return cycles.sort((a, b) => b.length - a.length).slice(0, 12);
 }
 
-export function generateCity(analysis: RepositoryAnalysis, insights: RepositoryInsights = { commits: [], pullRequests: [], contributors: [], ci: null }): CityModel {
+export function generateCity(
+  analysis: RepositoryAnalysis,
+  insights: RepositoryInsights = {
+    commits: [],
+    pullRequests: [],
+    contributors: [],
+    ci: null,
+    degraded: null,
+  },
+): CityModel {
   const plans = createDistrictPlans(analysis);
   const districts: CityDistrict[] = plans.map((plan) => ({
     id: plan.id,
@@ -429,7 +300,7 @@ export function generateCity(analysis: RepositoryAnalysis, insights: RepositoryI
   }));
   const buildings = createBuildings(plans, analysis, insights);
   const roads = createRoads(plans, analysis);
-  const connections = createConnections(buildings, analysis);
+  const connections = createConnections(buildings, analysis, roads);
   const coreBuilding = [...buildings].sort((a, b) => b.importance - a.importance)[0];
 
   const minX = Math.min(...districts.map((district) => district.position[0] - district.size[0] / 2), -12);

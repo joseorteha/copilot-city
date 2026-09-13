@@ -1,34 +1,68 @@
 "use client";
 
-import { RoundedBox } from "@react-three/drei";
-
+import { useEffect, useMemo } from "react";
+import { Color, Float32BufferAttribute, PlaneGeometry } from "three";
+import { terrainHeight } from "@/lib/city/terrain";
+import { groundTexture } from "./ground-texture";
 import { useCityStore } from "@/store/city-store";
-import type { CityBounds } from "@/types/city";
+import type { CityModel } from "@/types/city";
 
-export function Ground({ bounds }: { bounds: CityBounds }) {
-  const visualMode = useCityStore((state) => state.visualMode);
-  const width = Math.max(34, bounds.width);
-  const depth = Math.max(30, bounds.depth);
-  const night = visualMode === "night";
+export function Ground({ city }: { city: CityModel }) {
+  // Grass keeps its daylight vertex colours and is tinted towards moonlight after dark,
+  // instead of staying the same muddy green under a blue sky.
+  const night = useCityStore((state) => state.visualMode) === "night";
+  const geometry = useMemo(() => {
+    // The plane has to outrun the fog by a wide margin; anything shorter and the viewer
+    // sees its square edge against the sky.
+    const margin = city.bounds.radius * 6;
+    const mesh = new PlaneGeometry(city.bounds.width + margin, city.bounds.depth + margin, 72, 72);
+    mesh.rotateX(-Math.PI / 2);
+    const positions = mesh.attributes.position,
+      colors = new Float32Array(positions.count * 3);
+    const low = new Color("#526653"),
+      high = new Color("#8fa17a"),
+      dry = new Color("#b4a276");
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i),
+        z = positions.getZ(i),
+        y = terrainHeight(x, z, city.districts);
+      positions.setY(i, y);
+      const noise =
+        0.47 + Math.sin(x * 0.055) * Math.cos(z * 0.041) * 0.045 + Math.sin((x + z) * 0.018) * 0.03;
+      const color = low
+        .clone()
+        .lerp(high, noise)
+        .lerp(dry, Math.max(0, Math.sin(x * 0.017 - z * 0.023)) * 0.045);
+      color.toArray(colors, i * 3);
+    }
+    mesh.setAttribute("color", new Float32BufferAttribute(colors, 3));
+    mesh.computeVertexNormals();
+    return mesh;
+  }, [city.bounds.width, city.bounds.depth, city.bounds.radius, city.districts]);
+  // One tile roughly every eight units: fine enough to give the eye a scale reference,
+  // coarse enough that the pattern never announces itself.
+  const detail = useMemo(
+    () => groundTexture(Math.max(24, Math.round((city.bounds.width + city.bounds.radius * 8) / 8))),
+    [city.bounds.width, city.bounds.radius],
+  );
 
-  return <group>
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.9, 0]} receiveShadow>
-      <planeGeometry args={[width + 180, depth + 180]} />
-      <meshStandardMaterial color={night ? "#071312" : "#263c34"} roughness={0.92} metalness={0.02} />
+  useEffect(
+    () => () => {
+      geometry.dispose();
+      detail?.dispose();
+    },
+    [detail, geometry],
+  );
+
+  return (
+    <mesh geometry={geometry} receiveShadow>
+      <meshStandardMaterial
+        vertexColors
+        map={detail}
+        color={night ? "#39505c" : "#ffffff"}
+        roughness={0.94}
+        metalness={0}
+      />
     </mesh>
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.82, 0]}>
-      <ringGeometry args={[Math.max(width, depth) * 0.7, Math.max(width, depth) * 1.8, 96]} />
-      <meshPhysicalMaterial color={night ? "#102e32" : "#496d6b"} roughness={0.2} metalness={0.12} clearcoat={0.7} clearcoatRoughness={0.28} transparent opacity={0.72} />
-    </mesh>
-    <RoundedBox args={[width + 1.8, 0.84, depth + 1.8]} radius={1.15} smoothness={6} position={[0, -0.45, 0]} receiveShadow castShadow>
-      <meshStandardMaterial color={night ? "#172120" : "#313d3a"} roughness={0.82} metalness={0.06} />
-    </RoundedBox>
-    <RoundedBox args={[width, 0.16, depth]} radius={0.72} smoothness={5} position={[0, 0.02, 0]} receiveShadow>
-      <meshStandardMaterial color={night ? "#26332f" : "#53605a"} roughness={0.94} />
-    </RoundedBox>
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.115, 0]}>
-      <ringGeometry args={[Math.max(width, depth) * 0.485, Math.max(width, depth) * 0.492, 96]} />
-      <meshBasicMaterial color={night ? "#599f99" : "#b9aa7a"} transparent opacity={0.38} />
-    </mesh>
-  </group>;
+  );
 }
